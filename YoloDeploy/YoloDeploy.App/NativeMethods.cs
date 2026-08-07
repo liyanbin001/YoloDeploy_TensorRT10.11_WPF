@@ -60,4 +60,20 @@ internal static class NativeMethods
         DllName,
         CallingConvention = CallingConvention.Cdecl)]
     internal static extern void YoloDestroy(IntPtr handle);
+
+    [DllImport(
+        DllName,
+        CallingConvention = CallingConvention.Cdecl,
+        CharSet = CharSet.Unicode)]
+    internal static extern int YoloBuildEngineFromOnnx(
+        string onnxPath,
+        string enginePath,
+        int inputWidth,
+        int inputHeight,
+        int enableFp16,
+        int workspaceMiB,
+        StringBuilder logBuffer,
+        int logCapacity,
+        StringBuilder errorBuffer,
+        int errorCapacity);
 }

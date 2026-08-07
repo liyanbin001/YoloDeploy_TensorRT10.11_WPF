@@ -3,9 +3,9 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="YOLOv8 TensorRT Deploy"
         Width="1280"
-        Height="840"
-        MinWidth="1000"
-        MinHeight="700"
+        Height="940"
+        MinWidth="1050"
+        MinHeight="800"
         WindowStartupLocation="CenterScreen"
         Closing="Window_Closing">
     <Grid Margin="16">
@@ -13,11 +13,121 @@
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <Border Grid.Row="0"
+        <!-- Phase 1: ONNX -> Engine -->
+        <GroupBox Grid.Row="0"
+                  Header="ONNX → TensorRT Engine"
+                  Padding="10">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="95"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="95"/>
+                </Grid.ColumnDefinitions>
+
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock Grid.Row="0"
+                           Grid.Column="0"
+                           VerticalAlignment="Center"
+                           Text="ONNX 文件"/>
+
+                <TextBox x:Name="OnnxPathTextBox"
+                         Grid.Row="0"
+                         Grid.Column="1"
+                         Margin="8,4"/>
+
+                <Button Grid.Row="0"
+                        Grid.Column="2"
+                        Margin="4"
+                        Padding="12,6"
+                        Content="浏览..."
+                        Click="BrowseOnnx_Click"/>
+
+                <TextBlock Grid.Row="1"
+                           Grid.Column="0"
+                           VerticalAlignment="Center"
+                           Text="Engine 输出"/>
+
+                <TextBox x:Name="EngineOutputPathTextBox"
+                         Grid.Row="1"
+                         Grid.Column="1"
+                         Margin="8,4"/>
+
+                <Button Grid.Row="1"
+                        Grid.Column="2"
+                        Margin="4"
+                        Padding="12,6"
+                        Content="另存为..."
+                        Click="BrowseEngineOutput_Click"/>
+
+                <StackPanel Grid.Row="2"
+                            Grid.Column="0"
+                            Grid.ColumnSpan="3"
+                            Margin="0,6,0,4"
+                            Orientation="Horizontal">
+
+                    <TextBlock VerticalAlignment="Center"
+                               Text="输入尺寸"/>
+
+                    <TextBox x:Name="BuildInputSizeTextBox"
+                             Width="70"
+                             Margin="8,0,20,0"
+                             Text="640"/>
+
+                    <TextBlock VerticalAlignment="Center"
+                               Text="精度"/>
+
+                    <ComboBox x:Name="PrecisionComboBox"
+                              Width="90"
+                              Margin="8,0,20,0"
+                              SelectedIndex="0">
+                        <ComboBoxItem Content="FP32"/>
+                        <ComboBoxItem Content="FP16"/>
+                    </ComboBox>
+
+                    <TextBlock VerticalAlignment="Center"
+                               Text="Workspace MiB"/>
+
+                    <TextBox x:Name="WorkspaceTextBox"
+                             Width="90"
+                             Margin="8,0,20,0"
+                             Text="2048"/>
+
+                    <Button x:Name="BuildEngineButton"
+                            Width="140"
+                            Padding="10,6"
+                            Content="生成 Engine"
+                            Click="BuildEngine_Click"/>
+                </StackPanel>
+
+                <TextBox x:Name="BuildLogTextBox"
+                         Grid.Row="3"
+                         Grid.Column="0"
+                         Grid.ColumnSpan="3"
+                         Height="82"
+                         Margin="0,5,0,0"
+                         Padding="6"
+                         IsReadOnly="True"
+                         TextWrapping="Wrap"
+                         AcceptsReturn="True"
+                         VerticalScrollBarVisibility="Auto"
+                         Text="尚未执行 ONNX → Engine 构建。"/>
+            </Grid>
+        </GroupBox>
+
+        <!-- Existing engine / image selection -->
+        <Border Grid.Row="1"
+                Margin="0,12,0,0"
                 Padding="14"
                 BorderBrush="#D7D7D7"
                 BorderThickness="1"
@@ -59,7 +169,7 @@
             </Grid>
         </Border>
 
-        <StackPanel Grid.Row="1"
+        <StackPanel Grid.Row="2"
                     Margin="0,12,0,0"
                     Orientation="Horizontal">
             <TextBlock VerticalAlignment="Center" Text="置信度"/>
@@ -96,13 +206,13 @@
         </StackPanel>
 
         <TextBlock x:Name="ModelInfoTextBlock"
-                   Grid.Row="2"
+                   Grid.Row="3"
                    Margin="0,10,0,10"
                    Foreground="#555555"
                    TextWrapping="Wrap"
                    Text="模型尚未加载。"/>
 
-        <Grid Grid.Row="3">
+        <Grid Grid.Row="4">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="3*"/>
                 <ColumnDefinition Width="*"/>
@@ -146,7 +256,7 @@
             </Border>
         </Grid>
 
-        <StatusBar Grid.Row="4" Margin="0,12,0,0">
+        <StatusBar Grid.Row="5" Margin="0,12,0,0">
             <StatusBarItem>
                 <TextBlock x:Name="StatusTextBlock" Text="就绪"/>
             </StatusBarItem>

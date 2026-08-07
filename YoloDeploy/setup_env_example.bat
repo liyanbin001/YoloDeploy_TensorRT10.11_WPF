@@ -61,6 +61,12 @@ if exist "%TENSORRT_ROOT%\lib\nvinfer_10.lib" (
     echo [ERROR] TensorRT nvinfer_10.lib NOT found
 )
 
+if exist "%TENSORRT_ROOT%\lib\nvonnxparser_10.lib" (
+    echo [OK] TensorRT nvonnxparser_10.lib found
+) else (
+    echo [ERROR] TensorRT nvonnxparser_10.lib NOT found
+)
+
 if exist "%TENSORRT_ROOT%\lib\nvinfer_plugin_10.lib" (
     echo [OK] TensorRT nvinfer_plugin_10.lib found
 ) else (

@@ -44,3 +44,28 @@ YOLO_API int32_t __cdecl YoloDetectBgra(
     int32_t errorCapacity);
 
 YOLO_API void __cdecl YoloDestroy(void* handle);
+
+// Phase 1: ONNX -> TensorRT serialized engine.
+//
+// Return value:
+//   0  success
+//  -1  failure (see errorBuffer)
+//
+// Current intended scope:
+// - standard YOLO Detect-style ONNX
+// - one input tensor
+// - one output tensor
+// - batch 1
+// - fixed or dynamic NCHW input
+// - FP32 or TensorRT FP16 builder mode
+YOLO_API int32_t __cdecl YoloBuildEngineFromOnnx(
+    const wchar_t* onnxPath,
+    const wchar_t* enginePath,
+    int32_t inputWidth,
+    int32_t inputHeight,
+    int32_t enableFp16,
+    int32_t workspaceMiB,
+    wchar_t* logBuffer,
+    int32_t logCapacity,
+    wchar_t* errorBuffer,
+    int32_t errorCapacity);
