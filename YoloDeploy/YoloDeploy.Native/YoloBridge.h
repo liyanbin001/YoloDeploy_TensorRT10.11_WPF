@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include <cstdint>
 
 #ifdef YOLODEPLOYNATIVE_EXPORTS
@@ -58,6 +58,15 @@ YOLO_API void __cdecl YoloDestroy(void* handle);
 // - batch 1
 // - fixed or dynamic NCHW input
 // - FP32 or TensorRT FP16 builder mode
+
+// Phase 2: query active CUDA GPU / CUDA / TensorRT version information.
+// Return value: 0 success, -1 failure.
+YOLO_API int32_t __cdecl YoloGetGpuInfoJson(
+    wchar_t* jsonBuffer,
+    int32_t jsonCapacity,
+    wchar_t* errorBuffer,
+    int32_t errorCapacity);
+
 YOLO_API int32_t __cdecl YoloBuildEngineFromOnnx(
     const wchar_t* onnxPath,
     const wchar_t* enginePath,

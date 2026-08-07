@@ -79,6 +79,7 @@
   <ItemGroup>
     <ClCompile Include="YoloBridge.cpp" />
     <ClCompile Include="OnnxEngineBuilder.cpp" />
+    <ClCompile Include="SystemInfo.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>

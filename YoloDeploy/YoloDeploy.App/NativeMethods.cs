@@ -61,6 +61,17 @@ internal static class NativeMethods
         CallingConvention = CallingConvention.Cdecl)]
     internal static extern void YoloDestroy(IntPtr handle);
 
+
+    [DllImport(
+        DllName,
+        CallingConvention = CallingConvention.Cdecl,
+        CharSet = CharSet.Unicode)]
+    internal static extern int YoloGetGpuInfoJson(
+        StringBuilder jsonBuffer,
+        int jsonCapacity,
+        StringBuilder errorBuffer,
+        int errorCapacity);
+
     [DllImport(
         DllName,
         CallingConvention = CallingConvention.Cdecl,

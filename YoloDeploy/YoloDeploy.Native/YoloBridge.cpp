@@ -22,7 +22,6 @@
 #define NOMINMAX 
 #include <windows.h>
 
-using namespace std;
 namespace
 {
     class TrtLogger final : public nvinfer1::ILogger

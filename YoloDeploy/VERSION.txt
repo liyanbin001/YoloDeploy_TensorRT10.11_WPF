@@ -1,0 +1,4 @@
+﻿YoloDeploy TensorRT10.11 WPF
+Phase 3: one-click Release publishing
+Includes Phase 2: GPU info + Engine cache
+Includes Phase 1: ONNX -> Engine

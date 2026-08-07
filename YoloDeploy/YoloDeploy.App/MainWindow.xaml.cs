@@ -19,10 +19,20 @@ public partial class MainWindow : Window
     private int _currentStride;
     private string[] _classNames = Array.Empty<string>();
 
+    private GpuInfo? _gpuInfo;
+    private bool _uiReady;
+    private string? _cachedOnnxHash;
+    private string? _cachedOnnxHashPath;
+    private long _cachedOnnxLength;
+    private DateTime _cachedOnnxLastWriteUtc;
+
     public MainWindow()
     {
         InitializeComponent();
         LoadClassNames();
+        _uiReady = true;
+        UpdateCacheUiState();
+        UpdateCacheStats();
     }
 
     private void LoadClassNames()
@@ -40,10 +50,366 @@ public partial class MainWindow : Window
     }
 
     // ============================================================
+    // Phase 2: GPU information + Engine cache
+    // ============================================================
+
+    private async void Window_Loaded(
+        object sender,
+        RoutedEventArgs e)
+    {
+        await RefreshGpuInfoAsync();
+        await RefreshCachePreviewAsync();
+    }
+
+    private async void RefreshGpuInfo_Click(
+        object sender,
+        RoutedEventArgs e)
+    {
+        await RefreshGpuInfoAsync();
+        await RefreshCachePreviewAsync();
+    }
+
+    private async Task RefreshGpuInfoAsync()
+    {
+        try
+        {
+            RefreshGpuInfoButton.IsEnabled = false;
+
+            GpuInfoTextBlock.Text =
+                "正在读取 GPU / CUDA / TensorRT 信息...";
+
+            _gpuInfo =
+                await Task.Run(
+                    GpuInfoProvider.Query);
+
+            GpuInfoTextBlock.Text =
+                _gpuInfo.DisplayText;
+
+            StatusTextBlock.Text =
+                $"GPU 已识别：{_gpuInfo.Name} | CC {_gpuInfo.ComputeCapability}";
+        }
+        catch (Exception ex)
+        {
+            _gpuInfo = null;
+
+            GpuInfoTextBlock.Text =
+                $"GPU 信息读取失败：{ex.Message}";
+        }
+        finally
+        {
+            RefreshGpuInfoButton.IsEnabled = true;
+        }
+    }
+
+    private async void CacheOption_Changed(
+        object sender,
+        RoutedEventArgs e)
+    {
+        if (!_uiReady)
+            return;
+
+        UpdateCacheUiState();
+        await RefreshCachePreviewAsync();
+    }
+
+    private async void CacheParameter_TextChanged(
+        object sender,
+        TextChangedEventArgs e)
+    {
+        if (!_uiReady)
+            return;
+
+        await RefreshCachePreviewAsync();
+    }
+
+    private async void CacheParameter_SelectionChanged(
+        object sender,
+        SelectionChangedEventArgs e)
+    {
+        if (!_uiReady)
+            return;
+
+        await RefreshCachePreviewAsync();
+    }
+
+    private void UpdateCacheUiState()
+    {
+        bool useCache =
+            UseEngineCacheCheckBox.IsChecked == true;
+
+        EngineOutputPathTextBox.IsReadOnly =
+            useCache;
+
+        BrowseEngineOutputButton.IsEnabled =
+            !useCache;
+
+        ForceRebuildCheckBox.IsEnabled =
+            useCache;
+    }
+
+    private async Task<string> GetOnnxHashAsync(
+        string onnxPath)
+    {
+        FileInfo file =
+            new(onnxPath);
+
+        if (!file.Exists)
+        {
+            throw new FileNotFoundException(
+                "ONNX 文件不存在。",
+                onnxPath);
+        }
+
+        if (string.Equals(
+                _cachedOnnxHashPath,
+                file.FullName,
+                StringComparison.OrdinalIgnoreCase) &&
+            _cachedOnnxHash is not null &&
+            _cachedOnnxLength == file.Length &&
+            _cachedOnnxLastWriteUtc == file.LastWriteTimeUtc)
+        {
+            return _cachedOnnxHash;
+        }
+
+        string hash =
+            await EngineCacheManager.ComputeSha256Async(
+                file.FullName);
+
+        _cachedOnnxHashPath =
+            file.FullName;
+
+        _cachedOnnxHash =
+            hash;
+
+        _cachedOnnxLength =
+            file.Length;
+
+        _cachedOnnxLastWriteUtc =
+            file.LastWriteTimeUtc;
+
+        return hash;
+    }
+
+    private async Task<EngineCacheDescriptor?>
+        CreateCurrentCacheDescriptorAsync()
+    {
+        if (UseEngineCacheCheckBox.IsChecked != true)
+            return null;
+
+        string onnxPath =
+            OnnxPathTextBox.Text.Trim();
+
+        if (!File.Exists(onnxPath))
+            return null;
+
+        if (_gpuInfo is null)
+            return null;
+
+        if (!int.TryParse(
+                BuildInputSizeTextBox.Text,
+                out int inputSize) ||
+            inputSize <= 0)
+        {
+            return null;
+        }
+
+        if (!int.TryParse(
+                WorkspaceTextBox.Text,
+                out int workspaceMiB) ||
+            workspaceMiB < 64)
+        {
+            return null;
+        }
+
+        string hash =
+            await GetOnnxHashAsync(
+                onnxPath);
+
+        return EngineCacheManager.CreateDescriptor(
+            onnxPath,
+            hash,
+            _gpuInfo,
+            GetSelectedPrecision(),
+            inputSize,
+            inputSize,
+            workspaceMiB);
+    }
+
+    private async Task RefreshCachePreviewAsync()
+    {
+        if (!_uiReady)
+            return;
+
+        UpdateCacheUiState();
+        UpdateCacheStats();
+
+        if (UseEngineCacheCheckBox.IsChecked != true)
+        {
+            CacheStatusTextBlock.Text =
+                "缓存状态：已禁用。Engine 将保存到手动指定的位置。";
+
+            if (File.Exists(
+                    OnnxPathTextBox.Text.Trim()) &&
+                string.IsNullOrWhiteSpace(
+                    EngineOutputPathTextBox.Text))
+            {
+                EngineOutputPathTextBox.Text =
+                    BuildDefaultEnginePath(
+                        OnnxPathTextBox.Text.Trim());
+            }
+
+            return;
+        }
+
+        if (_gpuInfo is null)
+        {
+            CacheStatusTextBlock.Text =
+                "缓存状态：等待 GPU 信息。";
+
+            return;
+        }
+
+        string onnxPath =
+            OnnxPathTextBox.Text.Trim();
+
+        if (!File.Exists(onnxPath))
+        {
+            CacheStatusTextBlock.Text =
+                "缓存状态：等待选择 ONNX。";
+
+            return;
+        }
+
+        if (!int.TryParse(
+                BuildInputSizeTextBox.Text,
+                out int inputSize) ||
+            inputSize <= 0 ||
+            !int.TryParse(
+                WorkspaceTextBox.Text,
+                out int workspaceMiB) ||
+            workspaceMiB < 64)
+        {
+            CacheStatusTextBlock.Text =
+                "缓存状态：请输入有效的输入尺寸和 Workspace。";
+
+            return;
+        }
+
+        try
+        {
+            CacheStatusTextBlock.Text =
+                "缓存状态：正在计算 ONNX SHA-256...";
+
+            EngineCacheDescriptor? descriptor =
+                await CreateCurrentCacheDescriptorAsync();
+
+            if (descriptor is null)
+                return;
+
+            EngineOutputPathTextBox.Text =
+                descriptor.EnginePath;
+
+            bool hit =
+                EngineCacheManager.TryValidate(
+                    descriptor,
+                    out string reason);
+
+            CacheStatusTextBlock.Text =
+                hit
+                    ? $"缓存命中：{System.IO.Path.GetFileName(descriptor.EnginePath)}"
+                    : $"缓存未命中：{reason}。将生成 {System.IO.Path.GetFileName(descriptor.EnginePath)}";
+        }
+        catch (Exception ex)
+        {
+            CacheStatusTextBlock.Text =
+                $"缓存状态检查失败：{ex.Message}";
+        }
+    }
+
+    private void UpdateCacheStats()
+    {
+        try
+        {
+            EngineCacheStats stats =
+                EngineCacheManager.GetStats();
+
+            CacheStatsTextBlock.Text =
+                $"缓存：{stats.DisplayText}";
+        }
+        catch (Exception ex)
+        {
+            CacheStatsTextBlock.Text =
+                $"缓存统计失败：{ex.Message}";
+        }
+    }
+
+    private void OpenCache_Click(
+        object sender,
+        RoutedEventArgs e)
+    {
+        try
+        {
+            EngineCacheManager.OpenCacheFolder();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                ex.Message,
+                "打开缓存目录失败",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
+    }
+
+    private async void ClearCache_Click(
+        object sender,
+        RoutedEventArgs e)
+    {
+        var result =
+            MessageBox.Show(
+                "确定清空本机全部 TensorRT Engine 缓存吗？\n\n"
+                + EngineCacheManager.CacheRoot,
+                "清空 Engine 缓存",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning);
+
+        if (result != MessageBoxResult.Yes)
+            return;
+
+        try
+        {
+            if (EngineCacheManager.IsInsideCache(
+                    EnginePathTextBox.Text.Trim()))
+            {
+                DestroyDetector();
+
+                ModelInfoTextBlock.Text =
+                    "模型尚未加载。";
+            }
+
+            EngineCacheManager.ClearAll();
+
+            UpdateCacheStats();
+            await RefreshCachePreviewAsync();
+
+            StatusTextBlock.Text =
+                "Engine 缓存已清空";
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                ex.Message,
+                "清空缓存失败",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
+    }
+
+    // ============================================================
     // Phase 1: ONNX -> TensorRT Engine
     // ============================================================
 
-    private void BrowseOnnx_Click(
+    private async void BrowseOnnx_Click(
         object sender,
         RoutedEventArgs e)
     {
@@ -56,54 +422,70 @@ public partial class MainWindow : Window
         if (dialog.ShowDialog() != true)
             return;
 
-        OnnxPathTextBox.Text = dialog.FileName;
+        OnnxPathTextBox.Text =
+            dialog.FileName;
 
-        if (string.IsNullOrWhiteSpace(
-                EngineOutputPathTextBox.Text))
+        _cachedOnnxHash = null;
+        _cachedOnnxHashPath = null;
+
+        if (UseEngineCacheCheckBox.IsChecked != true)
         {
             EngineOutputPathTextBox.Text =
-                BuildDefaultEnginePath(dialog.FileName);
+                BuildDefaultEnginePath(
+                    dialog.FileName);
         }
+
+        await RefreshCachePreviewAsync();
     }
 
     private void BrowseEngineOutput_Click(
         object sender,
         RoutedEventArgs e)
     {
-        string onnxPath = OnnxPathTextBox.Text.Trim();
+        string onnxPath =
+            OnnxPathTextBox.Text.Trim();
 
-        var dialog = new SaveFileDialog
-        {
-            Title = "保存 TensorRT Engine",
-            Filter = "TensorRT Engine (*.engine)|*.engine|所有文件 (*.*)|*.*",
-            AddExtension = true,
-            DefaultExt = ".engine",
-            OverwritePrompt = true
-        };
+        var dialog =
+            new SaveFileDialog
+            {
+                Title = "保存 TensorRT Engine",
+                Filter = "TensorRT Engine (*.engine)|*.engine|所有文件 (*.*)|*.*",
+                AddExtension = true,
+                DefaultExt = ".engine",
+                OverwritePrompt = true
+            };
 
         if (File.Exists(onnxPath))
         {
             dialog.InitialDirectory =
-                 System.IO.Path.GetDirectoryName(onnxPath);
+                System.IO.Path.GetDirectoryName(
+                    onnxPath);
 
             dialog.FileName =
                 System.IO.Path.GetFileName(
-                    BuildDefaultEnginePath(onnxPath));
+                    BuildDefaultEnginePath(
+                        onnxPath));
         }
 
         if (dialog.ShowDialog() == true)
-            EngineOutputPathTextBox.Text = dialog.FileName;
+        {
+            UseEngineCacheCheckBox.IsChecked =
+                false;
+
+            EngineOutputPathTextBox.Text =
+                dialog.FileName;
+        }
     }
 
     private string BuildDefaultEnginePath(
         string onnxPath)
     {
         string directory =
-             System.IO.Path.GetDirectoryName(onnxPath)
+            System.IO.Path.GetDirectoryName(onnxPath)
             ?? Environment.CurrentDirectory;
 
         string stem =
-             System.IO.Path.GetFileNameWithoutExtension(onnxPath);
+            System.IO.Path.GetFileNameWithoutExtension(onnxPath);
 
         string size =
             int.TryParse(
@@ -134,8 +516,8 @@ public partial class MainWindow : Window
     }
 
     private async void BuildEngine_Click(
-        object sender,
-        RoutedEventArgs e)
+    object sender,
+    RoutedEventArgs e)
     {
         try
         {
@@ -151,8 +533,8 @@ public partial class MainWindow : Window
 
             if (!int.TryParse(
                     BuildInputSizeTextBox.Text,
-                    out int inputSize)
-                || inputSize <= 0)
+                    out int inputSize) ||
+                inputSize <= 0)
             {
                 throw new InvalidOperationException(
                     "输入尺寸必须是正整数，例如 640。");
@@ -160,55 +542,22 @@ public partial class MainWindow : Window
 
             if (!int.TryParse(
                     WorkspaceTextBox.Text,
-                    out int workspaceMiB)
-                || workspaceMiB < 64)
+                    out int workspaceMiB) ||
+                workspaceMiB < 64)
             {
                 throw new InvalidOperationException(
                     "Workspace 至少设置为 64 MiB；建议 2048。");
             }
 
-            string enginePath =
-                EngineOutputPathTextBox.Text.Trim();
-
-            if (string.IsNullOrWhiteSpace(enginePath))
+            if (_gpuInfo is null)
             {
-                enginePath =
-                    BuildDefaultEnginePath(onnxPath);
-
-                EngineOutputPathTextBox.Text =
-                    enginePath;
+                await RefreshGpuInfoAsync();
             }
 
-            if (!string.Equals(
-                    System.IO.Path.GetExtension(enginePath),
-                    ".engine",
-                    StringComparison.OrdinalIgnoreCase))
+            if (_gpuInfo is null)
             {
-                enginePath += ".engine";
-                EngineOutputPathTextBox.Text =
-                    enginePath;
-            }
-
-            string? outputDirectory =
-                System.IO.Path.GetDirectoryName(enginePath);
-
-            if (!string.IsNullOrWhiteSpace(
-                    outputDirectory))
-            {
-                Directory.CreateDirectory(
-                    outputDirectory);
-            }
-
-            if (File.Exists(enginePath))
-            {
-                var overwrite = MessageBox.Show(
-                    $"Engine 已存在：\n{enginePath}\n\n是否覆盖？",
-                    "确认覆盖",
-                    MessageBoxButton.YesNo,
-                    MessageBoxImage.Question);
-
-                if (overwrite != MessageBoxResult.Yes)
-                    return;
+                throw new InvalidOperationException(
+                    "无法读取当前 GPU 信息，不能安全创建 Engine 缓存。");
             }
 
             bool enableFp16 =
@@ -217,50 +566,173 @@ public partial class MainWindow : Window
                     "FP16",
                     StringComparison.OrdinalIgnoreCase);
 
-            // Building an engine can consume significant GPU memory.
-            // Release a currently loaded inference engine first.
+            EngineCacheDescriptor? cacheDescriptor =
+                null;
+
+            string enginePath;
+
+            if (UseEngineCacheCheckBox.IsChecked == true)
+            {
+                cacheDescriptor =
+                    await CreateCurrentCacheDescriptorAsync()
+                    ?? throw new InvalidOperationException(
+                        "无法生成 Engine 缓存描述。");
+
+                enginePath =
+                    cacheDescriptor.EnginePath;
+
+                EngineOutputPathTextBox.Text =
+                    enginePath;
+
+                bool forceRebuild =
+                    ForceRebuildCheckBox.IsChecked == true;
+
+                if (!forceRebuild &&
+                    EngineCacheManager.TryValidate(
+                        cacheDescriptor,
+                        out string cacheReason))
+                {
+                    EnginePathTextBox.Text =
+                        enginePath;
+
+                    InputSizeTextBox.Text =
+                        inputSize.ToString(
+                            CultureInfo.InvariantCulture);
+
+                    BuildLogTextBox.Text =
+                        $"Result: CACHE HIT\n"
+                        + $"Engine: {enginePath}\n"
+                        + $"GPU: {_gpuInfo.Name} | CC {_gpuInfo.ComputeCapability}\n"
+                        + $"TensorRT: {_gpuInfo.TensorRtVersion}\n"
+                        + $"Precision: {GetSelectedPrecision()}\n"
+                        + $"Input: {inputSize}x{inputSize}\n"
+                        + $"Workspace: {workspaceMiB} MiB\n"
+                        + $"Validation: {cacheReason}";
+
+                    CacheStatusTextBlock.Text =
+                        $"缓存命中：{System.IO.Path.GetFileName(enginePath)}";
+
+                    StatusTextBlock.Text =
+                        "已复用本机 Engine 缓存，无需重新构建。";
+
+                    return;
+                }
+            }
+            else
+            {
+                enginePath =
+                    EngineOutputPathTextBox.Text.Trim();
+
+                if (string.IsNullOrWhiteSpace(
+                        enginePath))
+                {
+                    enginePath =
+                        BuildDefaultEnginePath(
+                            onnxPath);
+
+                    EngineOutputPathTextBox.Text =
+                        enginePath;
+                }
+
+                if (!string.Equals(
+                        System.IO.Path.GetExtension(enginePath),
+                        ".engine",
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    enginePath += ".engine";
+
+                    EngineOutputPathTextBox.Text =
+                        enginePath;
+                }
+
+                if (File.Exists(enginePath))
+                {
+                    var overwrite =
+                        MessageBox.Show(
+                            $"Engine 已存在：\n{enginePath}\n\n是否覆盖？",
+                            "确认覆盖",
+                            MessageBoxButton.YesNo,
+                            MessageBoxImage.Question);
+
+                    if (overwrite !=
+                        MessageBoxResult.Yes)
+                    {
+                        return;
+                    }
+                }
+            }
+
+            string? outputDirectory =
+                System.IO.Path.GetDirectoryName(
+                    enginePath);
+
+            if (!string.IsNullOrWhiteSpace(
+                    outputDirectory))
+            {
+                Directory.CreateDirectory(
+                    outputDirectory);
+            }
+
             DestroyDetector();
+
             ModelInfoTextBlock.Text =
                 "模型尚未加载。";
 
-            BuildEngineButton.IsEnabled = false;
-            LoadModelButton.IsEnabled = false;
-            DetectButton.IsEnabled = false;
+            BuildEngineButton.IsEnabled =
+                false;
+
+            LoadModelButton.IsEnabled =
+                false;
+
+            DetectButton.IsEnabled =
+                false;
+
+            RefreshGpuInfoButton.IsEnabled =
+                false;
 
             StatusTextBlock.Text =
                 "正在从 ONNX 构建 TensorRT Engine，请勿关闭程序...";
 
             BuildLogTextBox.Text =
-                $"开始构建...\nONNX: {onnxPath}\n输出: {enginePath}";
+                $"开始构建...\n"
+                + $"GPU: {_gpuInfo.Name} | CC {_gpuInfo.ComputeCapability}\n"
+                + $"TensorRT: {_gpuInfo.TensorRtVersion}\n"
+                + $"ONNX: {onnxPath}\n"
+                + $"输出: {enginePath}\n"
+                + $"精度: {GetSelectedPrecision()}\n"
+                + $"输入: {inputSize}x{inputSize}\n"
+                + $"Workspace: {workspaceMiB} MiB";
 
-            var timer = Stopwatch.StartNew();
+            var timer =
+                Stopwatch.StartNew();
 
-            var result = await Task.Run(() =>
-            {
-                var log =
-                    new StringBuilder(32768);
+            var result =
+                await Task.Run(() =>
+                {
+                    var log =
+                        new StringBuilder(32768);
 
-                var error =
-                    new StringBuilder(8192);
+                    var error =
+                        new StringBuilder(8192);
 
-                int code =
-                    NativeMethods.YoloBuildEngineFromOnnx(
-                        onnxPath,
-                        enginePath,
-                        inputSize,
-                        inputSize,
-                        enableFp16 ? 1 : 0,
-                        workspaceMiB,
-                        log,
-                        log.Capacity,
-                        error,
-                        error.Capacity);
+                    int code =
+                        NativeMethods.YoloBuildEngineFromOnnx(
+                            onnxPath,
+                            enginePath,
+                            inputSize,
+                            inputSize,
+                            enableFp16 ? 1 : 0,
+                            workspaceMiB,
+                            log,
+                            log.Capacity,
+                            error,
+                            error.Capacity);
 
-                return (
-                    code,
-                    log: log.ToString(),
-                    error: error.ToString());
-            });
+                    return (
+                        code,
+                        log: log.ToString(),
+                        error: error.ToString());
+                });
 
             timer.Stop();
 
@@ -279,7 +751,18 @@ public partial class MainWindow : Window
                     "TensorRT 返回成功，但未找到输出 Engine 文件。");
             }
 
-            // Feed the newly generated engine into the existing workflow.
+            if (cacheDescriptor is not null)
+            {
+                await EngineCacheManager.WriteMetadataAsync(
+                    cacheDescriptor,
+                    result.log);
+
+                CacheStatusTextBlock.Text =
+                    $"缓存已写入：{System.IO.Path.GetFileName(enginePath)}";
+
+                UpdateCacheStats();
+            }
+
             EnginePathTextBox.Text =
                 enginePath;
 
@@ -290,10 +773,15 @@ public partial class MainWindow : Window
             StatusTextBlock.Text =
                 $"Engine 构建成功 | 总耗时 {timer.Elapsed.TotalSeconds:0.0} s";
 
+            string msgBoxText = $"Engine 构建成功！\n\n{enginePath}\n\n";
+            if (cacheDescriptor is not null)
+            {
+                msgBoxText += "已写入与当前 GPU / TensorRT / 模型配置绑定的本机缓存。\n";
+            }
+            msgBoxText += "已自动填入下方 Engine 路径，可以直接点击“加载模型”。";
+
             MessageBox.Show(
-                $"Engine 构建成功！\n\n{enginePath}\n\n"
-                + "已自动填入下方 Engine 路径，"
-                + "下一步可点击“加载模型”进行验证。",
+                msgBoxText,
                 "构建完成",
                 MessageBoxButton.OK,
                 MessageBoxImage.Information);
@@ -301,9 +789,8 @@ public partial class MainWindow : Window
         catch (DllNotFoundException ex)
         {
             MessageBox.Show(
-                "无法加载 Native/TensorRT ONNX Parser DLL。\n\n"
-                + "新增 ONNX 构建功能要求 TensorRT 10.11 的 "
-                + "nvonnxparser_10.dll 可被 Windows 找到。\n\n"
+                "无法加载 Native/TensorRT/CUDA DLL。\n\n"
+                + "ONNX 构建还要求 nvonnxparser_10.dll 可被 Windows 找到。\n\n"
                 + ex.Message,
                 "DLL 加载失败",
                 MessageBoxButton.OK,
@@ -325,9 +812,19 @@ public partial class MainWindow : Window
         }
         finally
         {
-            BuildEngineButton.IsEnabled = true;
-            LoadModelButton.IsEnabled = true;
-            DetectButton.IsEnabled = true;
+            BuildEngineButton.IsEnabled =
+                true;
+
+            LoadModelButton.IsEnabled =
+                true;
+
+            DetectButton.IsEnabled =
+                true;
+
+            RefreshGpuInfoButton.IsEnabled =
+                true;
+
+            UpdateCacheStats();
         }
     }
 

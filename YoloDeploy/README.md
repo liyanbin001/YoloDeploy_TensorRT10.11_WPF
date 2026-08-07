@@ -148,3 +148,59 @@ Check that the model uses standard Ultralytics preprocessing:
 - BGR/RGB equivalent input is RGB
 - divide by 255
 - NCHW
+
+
+## Phase 2: GPU information + Engine cache management
+
+This version keeps the existing Phase 1 ONNX -> Engine and YOLOv8 inference flow,
+and adds a machine-local TensorRT Engine cache.
+
+New capabilities:
+
+- Shows active CUDA GPU name, Compute Capability, VRAM and SM count.
+- Shows CUDA Runtime / CUDA Driver API versions.
+- Shows the TensorRT header/build version used by the native DLL.
+- Stores generated engines under:
+  `%LOCALAPPDATA%\YoloDeploy\EngineCache`
+- Cache identity includes:
+  - SHA-256 of ONNX contents
+  - GPU model
+  - Compute Capability
+  - SM count
+  - TensorRT major/minor/patch/build
+  - FP32 / FP16
+  - input width/height
+  - workspace MiB
+- Writes a `.engine.json` metadata file beside every cached engine.
+- Reuses a valid cache automatically, skipping TensorRT build.
+- Supports force rebuild, open-cache-folder and clear-cache operations.
+
+NVIDIA driver / CUDA runtime versions are recorded in metadata but intentionally
+not included in the cache key, so a compatible driver update does not by itself
+force an expensive engine rebuild.
+
+The existing `YoloBridge.cpp` inference implementation and
+`OnnxEngineBuilder.cpp` TensorRT builder implementation remain intact.
+
+
+## Phase 3: one-click Windows Release
+
+Run:
+
+```bat
+publish_release.bat
+```
+
+The script:
+
+1. Locates Visual Studio/MSBuild.
+2. Builds `YoloDeploy.Native` as `Release | x64`.
+3. Publishes WPF as `.NET 8 win-x64 self-contained`.
+4. Copies `YoloDeploy.Native.dll`.
+5. Collects TensorRT runtime/ONNX parser DLLs.
+6. Collects a portable CUDA user-mode runtime set.
+7. Copies `.onnx` files from `models` into the release `Models` directory.
+8. Adds `verify_runtime.bat`, `run_YoloDeploy.bat`, deployment documentation and a SHA-256 manifest.
+9. Creates `dist\YoloDeploy_v3_win-x64` and a ZIP beside it.
+
+The final package still requires a compatible NVIDIA display driver on the target machine.

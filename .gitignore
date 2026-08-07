@@ -15,12 +15,13 @@ obj/
 *.pth
 *.weights
 
+
 # 编译输出
 x64/
 x86/
 Debug/
 Release/
-
+dist/
 # 系统
 .DS_Store
 Thumbs.db
