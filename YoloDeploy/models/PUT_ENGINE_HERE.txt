@@ -1,0 +1,1 @@
+Place your standard YOLOv8 Detect .engine here if you want, or browse to it from the UI.
