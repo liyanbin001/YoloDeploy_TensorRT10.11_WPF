@@ -1,4 +1,4 @@
-#include "YoloBridge.h"
+﻿#include "YoloBridge.h"
 
 #include <NvInfer.h>
 #include <NvOnnxParser.h>
@@ -166,7 +166,7 @@ namespace
     {
         if (dims.nbDims != 4)
             throw std::runtime_error(
-                "Only 4D NCHW model inputs are supported in Phase 1.");
+                "Only 4D NCHW model inputs are supported.");
 
         // Standard YOLO input: N,C,H,W.
         if (dims.d[0] < 0) dims.d[0] = 1;
@@ -175,11 +175,11 @@ namespace
         if (dims.d[3] < 0) dims.d[3] = inputWidth;
 
         if (dims.d[0] != 1)
-            throw std::runtime_error("Phase 1 supports batch=1 only.");
+            throw std::runtime_error("This deployment supports batch=1 only.");
 
         if (dims.d[1] != 3)
             throw std::runtime_error(
-                "Phase 1 expects a 3-channel NCHW image input.");
+                "This deployment expects a 3-channel NCHW image input.");
 
         if (dims.d[2] <= 0 || dims.d[3] <= 0)
             throw std::runtime_error(
@@ -359,20 +359,20 @@ int32_t __cdecl YoloBuildEngineFromOnnx(
 
         if (originalInputDims.nbDims != 4)
             throw std::runtime_error(
-                "Phase 1 supports only NCHW 4D image input.");
+                "This deployment supports only NCHW 4D image input.");
 
         if (originalInputDims.d[0] > 0 &&
             originalInputDims.d[0] != 1)
         {
             throw std::runtime_error(
-                "Phase 1 supports batch=1 only.");
+                "This deployment supports batch=1 only.");
         }
 
         if (originalInputDims.d[1] > 0 &&
             originalInputDims.d[1] != 3)
         {
             throw std::runtime_error(
-                "Phase 1 expects 3 input channels.");
+                "This deployment expects 3 input channels.");
         }
 
         if (hasDynamicDimension(originalInputDims))
@@ -432,9 +432,36 @@ int32_t __cdecl YoloBuildEngineFromOnnx(
         }
         else
         {
+            const int fixedHeight = originalInputDims.d[2];
+            const int fixedWidth = originalInputDims.d[3];
+
+            if (fixedHeight <= 0 || fixedWidth <= 0)
+            {
+                throw std::runtime_error(
+                    "Fixed ONNX input has invalid height/width.");
+            }
+
+            if (fixedWidth != inputWidth ||
+                fixedHeight != inputHeight)
+            {
+                std::ostringstream oss;
+                oss
+                    << "Fixed ONNX input shape mismatch. "
+                    << "ONNX is [1,3,"
+                    << fixedHeight << "," << fixedWidth
+                    << "], but UI requested [1,3,"
+                    << inputHeight << "," << inputWidth
+                    << "]. Re-export the ONNX with the desired fixed size "
+                    << "or set the UI width/height to match the ONNX model.";
+
+                throw std::runtime_error(
+                    oss.str());
+            }
+
             report
-                << "ONNX input is fixed; requested input size is not used "
-                << "to change the model dimensions.\n";
+                << "Fixed ONNX input verified: [1,3,"
+                << fixedHeight << "," << fixedWidth
+                << "]\n";
         }
 
         const size_t workspaceBytes =

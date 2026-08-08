@@ -107,9 +107,18 @@
                             Orientation="Horizontal">
 
                     <TextBlock VerticalAlignment="Center"
-                               Text="输入尺寸"/>
+                               Text="固定输入宽度"/>
 
-                    <TextBox x:Name="BuildInputSizeTextBox"
+                    <TextBox x:Name="BuildInputWidthTextBox"
+                             Width="70"
+                             Margin="8,0,14,0"
+                             Text="640"
+                             TextChanged="CacheParameter_TextChanged"/>
+
+                    <TextBlock VerticalAlignment="Center"
+                               Text="固定输入高度"/>
+
+                    <TextBox x:Name="BuildInputHeightTextBox"
                              Width="70"
                              Margin="8,0,20,0"
                              Text="640"
@@ -277,9 +286,17 @@
                      Text="0.45"/>
 
             <TextBlock VerticalAlignment="Center"
-                       Text="动态输入尺寸"/>
+                       Text="Engine宽度"/>
 
-            <TextBox x:Name="InputSizeTextBox"
+            <TextBox x:Name="InputWidthTextBox"
+                     Width="70"
+                     Margin="8,0,14,0"
+                     Text="640"/>
+
+            <TextBlock VerticalAlignment="Center"
+                       Text="Engine高度"/>
+
+            <TextBox x:Name="InputHeightTextBox"
                      Width="70"
                      Margin="8,0,20,0"
                      Text="640"/>

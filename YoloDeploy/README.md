@@ -13,7 +13,7 @@ This first version intentionally targets the easiest and most reliable deploymen
 - Engine does **not** contain NMS
 - Typical output `[1, 84, 8400]` or `[1, 8400, 84]`
 - FP32 or FP16 input/output tensors
-- Fixed 640x640 input, or dynamic H/W engine where the app chooses 640x640
+- Fixed rectangular input H/W such as 1280x512; a dynamic ONNX may also be built as one fixed MIN=OPT=MAX H/W profile
 - COCO 80 classes by default; replace `YoloDeploy.App\coco.names` for custom classes
 
 Not targeted in this first version:
@@ -204,3 +204,39 @@ The script:
 9. Creates `dist\YoloDeploy_v3_win-x64` and a ZIP beside it.
 
 The final package still requires a compatible NVIDIA display driver on the target machine.
+
+
+## Phase 4: fixed rectangular industrial input
+
+The industrial deployment UI now uses separate fixed dimensions:
+
+```text
+Fixed input width
+Fixed input height
+```
+
+Examples:
+
+```text
+1280 x 512
+1024 x 768
+1920 x 640
+```
+
+The native APIs already accept width and height separately; Phase 4 wires those
+parameters through the WPF UI, cache key, ONNX builder and Engine loader.
+
+Behavior:
+
+- **Fixed-shape ONNX**: the requested UI width/height must exactly match the ONNX
+  `[1,3,H,W]` dimensions. A mismatch is rejected with a clear error.
+- **Dynamic-shape ONNX**: TensorRT creates one optimization profile with
+  `MIN = OPT = MAX = [1,3,H,W]`, so the resulting Engine is still used as a
+  fixed-size industrial Engine.
+- Engine cache keys continue to include `width x height`.
+- Existing LetterBox preprocessing already accepts `dstW` and `dstH` separately.
+- Existing detection decoding/NMS and Phase 3 one-click publishing are unchanged.
+
+For standard YOLO models, dimensions that are compatible with the model stride
+(often multiples of 32) are recommended. The deployment does not hard-code this
+rule because custom industrial models may have different requirements.

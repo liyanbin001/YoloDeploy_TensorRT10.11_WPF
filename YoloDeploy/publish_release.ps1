@@ -2,7 +2,7 @@
 param(
     [string]$Configuration = "Release",
     [string]$RuntimeIdentifier = "win-x64",
-    [string]$PackageName = "YoloDeploy_v3_win-x64",
+    [string]$PackageName = "YoloDeploy_v4_fixed-rect_win-x64",
     [switch]$NoZip
 )
 
@@ -343,7 +343,7 @@ $ModelReadme = @'
 1. 双击 ..\run_YoloDeploy.bat
 2. 选择本目录中的 .onnx
 3. 保持“使用本机 Engine 缓存”勾选
-4. 输入尺寸 640
+4. 设置固定输入宽度和固定输入高度，例如 1280 × 512
 5. 首次先用 FP32，确认检测正确后再测试 FP16
 6. Workspace 建议 2048 MiB
 

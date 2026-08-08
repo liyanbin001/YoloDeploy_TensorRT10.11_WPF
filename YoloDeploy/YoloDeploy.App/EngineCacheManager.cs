@@ -7,6 +7,7 @@ using System.IO;
 
 namespace YoloDeploy.App;
 
+
 internal sealed class EngineCacheDescriptor
 {
     public required string OnnxPath { get; init; }
