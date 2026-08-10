@@ -512,7 +512,7 @@ publish_release.bat
 Phase 4 默认发布包名称改为：
 
 ```text
-YoloDeploy_v4_fixed-rect_win-x64
+YoloDeploy_v5_detect-obb_win-x64
 ```
 
 发布后的目标电脑使用方式不变。

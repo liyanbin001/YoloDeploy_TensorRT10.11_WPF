@@ -1,4 +1,4 @@
-#include "YoloBridge.h"
+﻿#include "YoloBridge.h"
 
 #include <NvInfer.h>
 #include <NvInferPlugin.h>
@@ -19,7 +19,7 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
-#define NOMINMAX 
+#define NOMINMAX
 #include <windows.h>
 
 namespace
@@ -86,6 +86,29 @@ namespace
         float y2 = 0;
         float score = 0;
         int classId = -1;
+    };
+
+    struct ObbCandidate
+    {
+        float centerX = 0;
+        float centerY = 0;
+        float width = 0;
+        float height = 0;
+        float angle = 0;
+        float score = 0;
+        int classId = -1;
+    };
+
+    struct ObbCorners
+    {
+        float p1x = 0;
+        float p1y = 0;
+        float p2x = 0;
+        float p2y = 0;
+        float p3x = 0;
+        float p3y = 0;
+        float p4x = 0;
+        float p4y = 0;
     };
 
     static std::wstring widen(const std::string& text)
@@ -252,6 +275,150 @@ namespace
             }
         }
         return kept;
+    }
+
+
+    static float probabilisticObbIou(
+        const ObbCandidate& a,
+        const ObbCandidate& b)
+    {
+        // Scalar equivalent of Ultralytics ProbIoU used by rotated NMS.
+        // OBB format: center-x, center-y, width, height, angle (radians).
+        constexpr float eps = 1e-7f;
+
+        auto covariance = [](const ObbCandidate& box, float& ca, float& cb, float& cc)
+        {
+            const float w2 = box.width * box.width / 12.0f;
+            const float h2 = box.height * box.height / 12.0f;
+
+            const float c = std::cos(box.angle);
+            const float s = std::sin(box.angle);
+
+            const float c2 = c * c;
+            const float s2 = s * s;
+
+            ca = w2 * c2 + h2 * s2;
+            cb = w2 * s2 + h2 * c2;
+            cc = (w2 - h2) * c * s;
+        };
+
+        float a1 = 0, b1 = 0, c1 = 0;
+        float a2 = 0, b2 = 0, c2 = 0;
+
+        covariance(a, a1, b1, c1);
+        covariance(b, a2, b2, c2);
+
+        const float dx = a.centerX - b.centerX;
+        const float dy = a.centerY - b.centerY;
+
+        const float aa = a1 + a2;
+        const float bb = b1 + b2;
+        const float cc = c1 + c2;
+
+        const float denom = aa * bb - cc * cc + eps;
+
+        const float t1 =
+            ((aa * dy * dy) + (bb * dx * dx))
+            / denom
+            * 0.25f;
+
+        const float t2 =
+            (cc * (b.centerX - a.centerX) * (a.centerY - b.centerY))
+            / denom
+            * 0.5f;
+
+        const float det1 = std::max(a1 * b1 - c1 * c1, 0.0f);
+        const float det2 = std::max(a2 * b2 - c2 * c2, 0.0f);
+
+        const float logArg =
+            (aa * bb - cc * cc)
+            / (4.0f * std::sqrt(det1 * det2) + eps)
+            + eps;
+
+        const float t3 =
+            std::log(std::max(logArg, eps))
+            * 0.5f;
+
+        float bd = t1 + t2 + t3;
+        bd = clampf(bd, eps, 100.0f);
+
+        const float hd =
+            std::sqrt(std::max(1.0f - std::exp(-bd) + eps, 0.0f));
+
+        return clampf(1.0f - hd, 0.0f, 1.0f);
+    }
+
+    static std::vector<ObbCandidate> classAwareRotatedNms(
+        std::vector<ObbCandidate> candidates,
+        float threshold)
+    {
+        std::sort(
+            candidates.begin(),
+            candidates.end(),
+            [](const ObbCandidate& a, const ObbCandidate& b)
+            {
+                return a.score > b.score;
+            });
+
+        std::vector<ObbCandidate> kept;
+        kept.reserve(candidates.size());
+
+        // Ultralytics rotated NMS evaluates each candidate against all
+        // higher-confidence boxes (upper-triangle ProbIoU matrix).
+        // Restrict the comparison to the same class to preserve the existing
+        // class-aware behavior of this deployment application.
+        for (size_t i = 0; i < candidates.size(); ++i)
+        {
+            bool suppress = false;
+
+            for (size_t j = 0; j < i; ++j)
+            {
+                if (candidates[i].classId != candidates[j].classId)
+                    continue;
+
+                if (probabilisticObbIou(
+                        candidates[j],
+                        candidates[i]) >= threshold)
+                {
+                    suppress = true;
+                    break;
+                }
+            }
+
+            if (!suppress)
+                kept.push_back(candidates[i]);
+        }
+
+        return kept;
+    }
+
+    static ObbCorners obbToCorners(
+        const ObbCandidate& box)
+    {
+        const float halfW = box.width * 0.5f;
+        const float halfH = box.height * 0.5f;
+
+        const float c = std::cos(box.angle);
+        const float s = std::sin(box.angle);
+
+        auto rotatePoint =
+            [&](float dx, float dy, float& x, float& y)
+            {
+                // Image coordinates use +Y downward, therefore the normal
+                // 2D rotation formula visually follows Ultralytics' clockwise
+                // positive-angle convention.
+                x = box.centerX + dx * c - dy * s;
+                y = box.centerY + dx * s + dy * c;
+            };
+
+        ObbCorners points;
+
+        rotatePoint(-halfW, -halfH, points.p1x, points.p1y);
+        rotatePoint( halfW, -halfH, points.p2x, points.p2y);
+        rotatePoint( halfW,  halfH, points.p3x, points.p3y);
+        rotatePoint(-halfW,  halfH, points.p4x, points.p4y);
+
+        return points;
     }
 
     struct LetterboxInfo
@@ -488,7 +655,7 @@ namespace
                  << " " << dimsToString(outputDims)
                  << " " << dataTypeName(outputType)
                  << "\nPreprocess: LetterBox + RGB + /255 + NCHW"
-                 << "\nPostprocess: YOLOv8 raw decode + class-aware NMS";
+                 << "\nPostprocess: Detect or OBB raw decode selected by API";
             modelInfo = widen(info.str());
         }
 
@@ -619,6 +786,334 @@ namespace
             return result;
         }
 
+
+        std::vector<ObbCandidate> decodeObbOutput(
+            const std::vector<float>& output,
+            float confidence,
+            const LetterboxInfo& letterbox,
+            int originalW,
+            int originalH,
+            int expectedClassCount)
+        {
+            if (outputDims.nbDims != 3)
+            {
+                throw std::runtime_error(
+                    "Expected YOLO OBB raw output with 3 dimensions, "
+                    "e.g. [1,85,8400] for 80 classes.");
+            }
+
+            if (outputDims.d[0] != 1)
+                throw std::runtime_error("Only batch=1 OBB output is supported.");
+
+            const int d1 = outputDims.d[1];
+            const int d2 = outputDims.d[2];
+
+            bool channelsFirst = false;
+            int channels = 0;
+            int candidates = 0;
+
+            if (d1 <= 512 && d2 > d1)
+            {
+                channelsFirst = true;
+                channels = d1;
+                candidates = d2;
+            }
+            else if (d2 <= 512 && d1 > d2)
+            {
+                channelsFirst = false;
+                channels = d2;
+                candidates = d1;
+            }
+            else
+            {
+                throw std::runtime_error(
+                    "Cannot identify YOLO OBB output layout. "
+                    "Expected [1,C,N] or [1,N,C].");
+            }
+
+            // Ultralytics non-end-to-end OBB raw output:
+            // [x, y, w, h, class_probs..., angle]
+            const int classCount = channels - 5;
+
+            if (classCount <= 0)
+            {
+                throw std::runtime_error(
+                    "Output channel count is too small for YOLO OBB. "
+                    "Expected channels = 5 + class_count.");
+            }
+
+            if (expectedClassCount > 0 &&
+                classCount != expectedClassCount)
+            {
+                std::ostringstream oss;
+                oss
+                    << "OBB class count mismatch. Engine output implies "
+                    << classCount
+                    << " classes, but the application label file contains "
+                    << expectedClassCount
+                    << ". Replace coco.names with the OBB model class names "
+                    << "in exactly the training order.";
+
+                throw std::runtime_error(oss.str());
+            }
+
+            const int angleChannel =
+                4 + classCount;
+
+            auto valueAt =
+                [&](int candidate, int channel) -> float
+                {
+                    if (channelsFirst)
+                    {
+                        return output[
+                            static_cast<size_t>(channel)
+                            * candidates
+                            + candidate];
+                    }
+
+                    return output[
+                        static_cast<size_t>(candidate)
+                        * channels
+                        + channel];
+                };
+
+            std::vector<ObbCandidate> result;
+            result.reserve(std::min(candidates, 1000));
+
+            for (int i = 0; i < candidates; ++i)
+            {
+                int bestClass = 0;
+                float bestScore =
+                    valueAt(i, 4);
+
+                for (int c = 1; c < classCount; ++c)
+                {
+                    const float score =
+                        valueAt(i, 4 + c);
+
+                    if (score > bestScore)
+                    {
+                        bestScore = score;
+                        bestClass = c;
+                    }
+                }
+
+                if (bestScore < confidence)
+                    continue;
+
+                const float rawCx =
+                    valueAt(i, 0);
+
+                const float rawCy =
+                    valueAt(i, 1);
+
+                const float rawW =
+                    valueAt(i, 2);
+
+                const float rawH =
+                    valueAt(i, 3);
+
+                const float angle =
+                    valueAt(i, angleChannel);
+
+                // Undo LetterBox. Rotation itself is unchanged by the
+                // uniform scale + translation preprocessing.
+                const float cx =
+                    (rawCx - letterbox.left)
+                    / letterbox.scale;
+
+                const float cy =
+                    (rawCy - letterbox.top)
+                    / letterbox.scale;
+
+                const float w =
+                    rawW / letterbox.scale;
+
+                const float h =
+                    rawH / letterbox.scale;
+
+                if (!std::isfinite(cx) ||
+                    !std::isfinite(cy) ||
+                    !std::isfinite(w) ||
+                    !std::isfinite(h) ||
+                    !std::isfinite(angle) ||
+                    w <= 0.0f ||
+                    h <= 0.0f)
+                {
+                    continue;
+                }
+
+                // Keep boxes whose centers are at least close to the image.
+                // Corners are deliberately not individually clamped because
+                // doing so would geometrically distort a rotated rectangle.
+                if (cx < -w ||
+                    cy < -h ||
+                    cx > static_cast<float>(originalW) + w ||
+                    cy > static_cast<float>(originalH) + h)
+                {
+                    continue;
+                }
+
+                result.push_back(
+                    ObbCandidate{
+                        cx,
+                        cy,
+                        w,
+                        h,
+                        angle,
+                        bestScore,
+                        bestClass
+                    });
+            }
+
+            return result;
+        }
+
+        std::vector<ObbCandidate> detectObb(
+            const uint8_t* bgra,
+            int width,
+            int height,
+            int stride,
+            float confidence,
+            float nmsThreshold,
+            int expectedClassCount,
+            float& inferenceMs)
+        {
+            std::lock_guard<std::mutex> lock(mutex);
+
+            std::vector<float> inputFloat;
+
+            LetterboxInfo letterbox =
+                preprocessBgra(
+                    bgra,
+                    width,
+                    height,
+                    stride,
+                    inputW,
+                    inputH,
+                    inputFloat);
+
+            if (inputType == nvinfer1::DataType::kFLOAT)
+            {
+                if (inputFloat.size() * sizeof(float) != inputDevice.bytes)
+                {
+                    throw std::runtime_error(
+                        "Input tensor byte size mismatch.");
+                }
+
+                checkCuda(
+                    cudaMemcpyAsync(
+                        inputDevice.ptr,
+                        inputFloat.data(),
+                        inputDevice.bytes,
+                        cudaMemcpyHostToDevice,
+                        stream.stream),
+                    "cudaMemcpyAsync(input FP32)");
+            }
+            else
+            {
+                std::vector<__half> inputHalf(
+                    inputFloat.size());
+
+                for (size_t i = 0; i < inputFloat.size(); ++i)
+                {
+                    inputHalf[i] =
+                        __float2half(inputFloat[i]);
+                }
+
+                if (inputHalf.size() * sizeof(__half) != inputDevice.bytes)
+                {
+                    throw std::runtime_error(
+                        "FP16 input tensor byte size mismatch.");
+                }
+
+                checkCuda(
+                    cudaMemcpyAsync(
+                        inputDevice.ptr,
+                        inputHalf.data(),
+                        inputDevice.bytes,
+                        cudaMemcpyHostToDevice,
+                        stream.stream),
+                    "cudaMemcpyAsync(input FP16)");
+            }
+
+            cudaEvent_t start = nullptr;
+            cudaEvent_t stop = nullptr;
+
+            checkCuda(
+                cudaEventCreate(&start),
+                "cudaEventCreate(start)");
+
+            checkCuda(
+                cudaEventCreate(&stop),
+                "cudaEventCreate(stop)");
+
+            try
+            {
+                checkCuda(
+                    cudaEventRecord(
+                        start,
+                        stream.stream),
+                    "cudaEventRecord(start)");
+
+                if (!context->enqueueV3(
+                        stream.stream))
+                {
+                    throw std::runtime_error(
+                        "TensorRT enqueueV3 failed.");
+                }
+
+                checkCuda(
+                    cudaEventRecord(
+                        stop,
+                        stream.stream),
+                    "cudaEventRecord(stop)");
+
+                checkCuda(
+                    cudaEventSynchronize(stop),
+                    "cudaEventSynchronize(stop)");
+
+                checkCuda(
+                    cudaEventElapsedTime(
+                        &inferenceMs,
+                        start,
+                        stop),
+                    "cudaEventElapsedTime");
+
+                std::vector<float> output =
+                    copyOutputToFloat();
+
+                auto decoded =
+                    decodeObbOutput(
+                        output,
+                        confidence,
+                        letterbox,
+                        width,
+                        height,
+                        expectedClassCount);
+
+                auto finalBoxes =
+                    classAwareRotatedNms(
+                        std::move(decoded),
+                        nmsThreshold);
+
+                cudaEventDestroy(start);
+                cudaEventDestroy(stop);
+
+                return finalBoxes;
+            }
+            catch (...)
+            {
+                if (start)
+                    cudaEventDestroy(start);
+
+                if (stop)
+                    cudaEventDestroy(stop);
+
+                throw;
+            }
+        }
+
         std::vector<Candidate> detect(
             const uint8_t* bgra,
             int width,
@@ -730,6 +1225,62 @@ void* __cdecl YoloCreate(
     }
 }
 
+
+int32_t __cdecl YoloGetTaskHint(
+    void* handle,
+    int32_t expectedClassCount)
+{
+    if (!handle ||
+        expectedClassCount <= 0)
+    {
+        return -1;
+    }
+
+    auto* detector =
+        static_cast<Detector*>(handle);
+
+    const auto& dims =
+        detector->outputDims;
+
+    if (dims.nbDims != 3 ||
+        dims.d[0] != 1)
+    {
+        return -1;
+    }
+
+    const int d1 = dims.d[1];
+    const int d2 = dims.d[2];
+
+    int channels = 0;
+
+    if (d1 <= 512 && d2 > d1)
+    {
+        channels = d1;
+    }
+    else if (d2 <= 512 && d1 > d2)
+    {
+        channels = d2;
+    }
+    else
+    {
+        return -1;
+    }
+
+    if (channels ==
+        4 + expectedClassCount)
+    {
+        return 0;
+    }
+
+    if (channels ==
+        5 + expectedClassCount)
+    {
+        return 1;
+    }
+
+    return -1;
+}
+
 int32_t __cdecl YoloGetModelInfo(
     void* handle,
     wchar_t* infoBuffer,
@@ -802,6 +1353,127 @@ int32_t __cdecl YoloDetectBgra(
     catch (...)
     {
         setError(L"Unknown inference error.", errorBuffer, errorCapacity);
+        return -1;
+    }
+}
+
+
+int32_t __cdecl YoloDetectObbBgra(
+    void* handle,
+    const uint8_t* bgra,
+    int32_t width,
+    int32_t height,
+    int32_t stride,
+    float confidenceThreshold,
+    float nmsThreshold,
+    int32_t expectedClassCount,
+    YoloObbDetection* results,
+    int32_t resultCapacity,
+    float* inferenceMilliseconds,
+    wchar_t* errorBuffer,
+    int32_t errorCapacity)
+{
+    try
+    {
+        if (!handle)
+            throw std::runtime_error("Detector handle is null.");
+
+        if (!bgra)
+            throw std::runtime_error("Image data is null.");
+
+        if (!results || resultCapacity <= 0)
+            throw std::runtime_error("OBB result buffer is invalid.");
+
+        confidenceThreshold =
+            clampf(
+                confidenceThreshold,
+                0.0f,
+                1.0f);
+
+        nmsThreshold =
+            clampf(
+                nmsThreshold,
+                0.0f,
+                1.0f);
+
+        auto* detector =
+            static_cast<Detector*>(handle);
+
+        float ms = 0.0f;
+
+        auto detections =
+            detector->detectObb(
+                bgra,
+                width,
+                height,
+                stride,
+                confidenceThreshold,
+                nmsThreshold,
+                expectedClassCount,
+                ms);
+
+        if (inferenceMilliseconds)
+            *inferenceMilliseconds = ms;
+
+        const int32_t count =
+            static_cast<int32_t>(
+                std::min<size_t>(
+                    detections.size(),
+                    static_cast<size_t>(
+                        resultCapacity)));
+
+        for (int32_t i = 0; i < count; ++i)
+        {
+            const auto& d =
+                detections[
+                    static_cast<size_t>(i)];
+
+            const ObbCorners corners =
+                obbToCorners(d);
+
+            results[i] =
+                YoloObbDetection{
+                    d.centerX,
+                    d.centerY,
+                    d.width,
+                    d.height,
+                    d.angle,
+                    d.score,
+                    d.classId,
+                    corners.p1x,
+                    corners.p1y,
+                    corners.p2x,
+                    corners.p2y,
+                    corners.p3x,
+                    corners.p3y,
+                    corners.p4x,
+                    corners.p4y
+                };
+        }
+
+        setError(
+            L"",
+            errorBuffer,
+            errorCapacity);
+
+        return count;
+    }
+    catch (const std::exception& ex)
+    {
+        setError(
+            widen(ex.what()),
+            errorBuffer,
+            errorCapacity);
+
+        return -1;
+    }
+    catch (...)
+    {
+        setError(
+            L"Unknown OBB inference error.",
+            errorBuffer,
+            errorCapacity);
+
         return -1;
     }
 }

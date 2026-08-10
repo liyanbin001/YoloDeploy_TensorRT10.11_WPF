@@ -1,24 +1,25 @@
 ﻿# YoloDeploy
 
-Windows x64 / .NET 8 WPF + C++ TensorRT 10.11 inference demo for standard Ultralytics YOLOv8 Detect engines.
+Windows x64 / .NET 8 WPF + C++ TensorRT 10.11 deployment app for Ultralytics YOLO Detect and OBB raw-output engines.
 
 ## Supported engine profile
 
 This first version intentionally targets the easiest and most reliable deployment path:
 
-- Standard Ultralytics YOLOv8 **object detection** model (horizontal boxes)
+- Standard Ultralytics YOLO **Detect** (horizontal boxes) or **OBB** (rotated boxes)
 - Batch = 1
 - One image input
 - One prediction output
 - Engine does **not** contain NMS
-- Typical output `[1, 84, 8400]` or `[1, 8400, 84]`
+- Detect raw output: `[1, 4+nc, N]` or `[1, N, 4+nc]`
+- OBB raw output: `[1, 5+nc, N]` or `[1, N, 5+nc]`
 - FP32 or FP16 input/output tensors
 - Fixed rectangular input H/W such as 1280x512; a dynamic ONNX may also be built as one fixed MIN=OPT=MAX H/W profile
 - COCO 80 classes by default; replace `YoloDeploy.App\coco.names` for custom classes
 
 Not targeted in this first version:
 
-- OBB / segmentation / pose / classification
+- Segmentation / pose / classification
 - INT8 input/output tensors
 - Engines with EfficientNMS / multiple outputs
 - Batch > 1
@@ -138,7 +139,7 @@ Run:
 "%TENSORRT_ROOT%\bin\trtexec.exe" --loadEngine="your.engine" --verbose --dumpLayerInfo
 ```
 
-This project expects a standard raw YOLOv8 detection output. If your engine embeds NMS or has multiple output tensors, adapt `decodeOutput()`.
+This project expects a standard raw YOLO Detect or OBB prediction output. Engines with embedded/end-to-end NMS or custom multi-output heads require separate output adapters.
 
 ### Boxes are wrong
 
@@ -240,3 +241,31 @@ Behavior:
 For standard YOLO models, dimensions that are compatible with the model stride
 (often multiples of 32) are recommended. The deployment does not hard-code this
 rule because custom industrial models may have different requirements.
+
+
+## Phase 5: Detect + OBB rotated boxes
+
+The application now keeps two independent inference paths:
+
+```text
+Detect -> YoloDetectBgra()    -> axis-aligned decode + class-aware NMS
+OBB    -> YoloDetectObbBgra() -> xywhr+angle decode + ProbIoU rotated NMS
+```
+
+OBB raw output is expected as:
+
+```text
+[x, y, w, h, class_probs..., angle]
+```
+
+so the raw channel count is:
+
+```text
+5 + number_of_classes
+```
+
+The WPF UI draws OBB results as four-point polygons and displays the angle in degrees.
+`coco.names` must contain the actual model classes in training order.
+
+The Phase 1 ONNX builder, Phase 2 GPU Engine cache, Phase 4 fixed rectangular W/H
+input and Phase 3 one-click publishing are preserved.

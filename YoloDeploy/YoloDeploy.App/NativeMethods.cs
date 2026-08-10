@@ -18,6 +18,27 @@ internal static class NativeMethods
         public int ClassId;
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct YoloObbDetection
+    {
+        public float CenterX;
+        public float CenterY;
+        public float Width;
+        public float Height;
+        public float AngleRadians;
+        public float Score;
+        public int ClassId;
+
+        public float P1X;
+        public float P1Y;
+        public float P2X;
+        public float P2Y;
+        public float P3X;
+        public float P3Y;
+        public float P4X;
+        public float P4Y;
+    }
+
     [DllImport(
         DllName,
         CallingConvention = CallingConvention.Cdecl,
@@ -28,6 +49,13 @@ internal static class NativeMethods
         int dynamicInputHeight,
         StringBuilder errorBuffer,
         int errorCapacity);
+
+    [DllImport(
+        DllName,
+        CallingConvention = CallingConvention.Cdecl)]
+    internal static extern int YoloGetTaskHint(
+        IntPtr handle,
+        int expectedClassCount);
 
     [DllImport(
         DllName,
@@ -51,6 +79,25 @@ internal static class NativeMethods
         float confidenceThreshold,
         float nmsThreshold,
         [Out] YoloDetection[] results,
+        int resultCapacity,
+        out float inferenceMilliseconds,
+        StringBuilder errorBuffer,
+        int errorCapacity);
+
+    [DllImport(
+        DllName,
+        CallingConvention = CallingConvention.Cdecl,
+        CharSet = CharSet.Unicode)]
+    internal static extern int YoloDetectObbBgra(
+        IntPtr handle,
+        byte[] bgra,
+        int width,
+        int height,
+        int stride,
+        float confidenceThreshold,
+        float nmsThreshold,
+        int expectedClassCount,
+        [Out] YoloObbDetection[] results,
         int resultCapacity,
         out float inferenceMilliseconds,
         StringBuilder errorBuffer,

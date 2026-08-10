@@ -8,7 +8,6 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
-
 namespace YoloDeploy.App;
 
 public partial class MainWindow : Window
@@ -430,14 +429,17 @@ public partial class MainWindow : Window
         if (dialog.ShowDialog() != true)
             return;
 
-        OnnxPathTextBox.Text = dialog.FileName;
+        OnnxPathTextBox.Text =
+            dialog.FileName;
 
         _cachedOnnxHash = null;
         _cachedOnnxHashPath = null;
 
         if (UseEngineCacheCheckBox.IsChecked != true)
         {
-            EngineOutputPathTextBox.Text = BuildDefaultEnginePath(dialog.FileName);
+            EngineOutputPathTextBox.Text =
+                BuildDefaultEnginePath(
+                    dialog.FileName);
         }
 
         await RefreshCachePreviewAsync();
@@ -447,44 +449,69 @@ public partial class MainWindow : Window
         object sender,
         RoutedEventArgs e)
     {
-        string onnxPath = OnnxPathTextBox.Text.Trim();
+        string onnxPath =
+            OnnxPathTextBox.Text.Trim();
 
-        var dialog = new SaveFileDialog
-        {
-            Title = "保存 TensorRT Engine",
-            Filter = "TensorRT Engine (*.engine)|*.engine|所有文件 (*.*)|*.*",
-            AddExtension = true,
-            DefaultExt = ".engine",
-            OverwritePrompt = true
-        };
+        var dialog =
+            new SaveFileDialog
+            {
+                Title = "保存 TensorRT Engine",
+                Filter = "TensorRT Engine (*.engine)|*.engine|所有文件 (*.*)|*.*",
+                AddExtension = true,
+                DefaultExt = ".engine",
+                OverwritePrompt = true
+            };
 
         if (File.Exists(onnxPath))
         {
-            dialog.InitialDirectory = System.IO.Path.GetDirectoryName(onnxPath);
-            dialog.FileName = System.IO.Path.GetFileName(BuildDefaultEnginePath(onnxPath));
+            dialog.InitialDirectory =
+                System.IO.Path.GetDirectoryName(
+                    onnxPath);
+
+            dialog.FileName =
+                System.IO.Path.GetFileName(
+                    BuildDefaultEnginePath(
+                        onnxPath));
         }
 
         if (dialog.ShowDialog() == true)
         {
-            UseEngineCacheCheckBox.IsChecked = false;
-            EngineOutputPathTextBox.Text = dialog.FileName;
+            UseEngineCacheCheckBox.IsChecked =
+                false;
+
+            EngineOutputPathTextBox.Text =
+                dialog.FileName;
         }
     }
 
-    private string BuildDefaultEnginePath(string onnxPath)
+    private string BuildDefaultEnginePath(
+        string onnxPath)
     {
-        string directory = System.IO.Path.GetDirectoryName(onnxPath) ?? Environment.CurrentDirectory;
-        string stem = System.IO.Path.GetFileNameWithoutExtension(onnxPath);
+        string directory =
+            System.IO.Path.GetDirectoryName(onnxPath)
+            ?? Environment.CurrentDirectory;
 
-        int width = int.TryParse(BuildInputWidthTextBox.Text, out int parsedWidth) && parsedWidth > 0
-            ? parsedWidth
-            : 640;
+        string stem =
+            System.IO.Path.GetFileNameWithoutExtension(onnxPath);
 
-        int height = int.TryParse(BuildInputHeightTextBox.Text, out int parsedHeight) && parsedHeight > 0
-            ? parsedHeight
-            : 640;
+        int width =
+            int.TryParse(
+                BuildInputWidthTextBox.Text,
+                out int parsedWidth)
+            && parsedWidth > 0
+                ? parsedWidth
+                : 640;
 
-        string precision = GetSelectedPrecision();
+        int height =
+            int.TryParse(
+                BuildInputHeightTextBox.Text,
+                out int parsedHeight)
+            && parsedHeight > 0
+                ? parsedHeight
+                : 640;
+
+        string precision =
+            GetSelectedPrecision();
 
         return System.IO.Path.Combine(
             directory,
@@ -493,37 +520,57 @@ public partial class MainWindow : Window
 
     private string GetSelectedPrecision()
     {
-        if (PrecisionComboBox.SelectedItem is ComboBoxItem item)
+        if (PrecisionComboBox.SelectedItem
+            is ComboBoxItem item)
         {
-            return item.Content?.ToString() ?? "FP32";
+            return item.Content?.ToString()
+                   ?? "FP32";
         }
+
         return "FP32";
     }
 
-    private async void BuildEngine_Click(object sender, RoutedEventArgs e)
+    private async void BuildEngine_Click(
+        object sender,
+        RoutedEventArgs e)
     {
         try
         {
-            string onnxPath = OnnxPathTextBox.Text.Trim();
+            string onnxPath =
+                OnnxPathTextBox.Text.Trim();
 
             if (!File.Exists(onnxPath))
             {
-                throw new FileNotFoundException("请选择有效的 .onnx 文件。", onnxPath);
+                throw new FileNotFoundException(
+                    "请选择有效的 .onnx 文件。",
+                    onnxPath);
             }
 
-            if (!int.TryParse(BuildInputWidthTextBox.Text, out int inputWidth) || inputWidth <= 0)
+            if (!int.TryParse(
+                    BuildInputWidthTextBox.Text,
+                    out int inputWidth) ||
+                inputWidth <= 0)
             {
-                throw new InvalidOperationException("固定输入宽度必须是正整数，例如 1280。");
+                throw new InvalidOperationException(
+                    "固定输入宽度必须是正整数，例如 1280。");
             }
 
-            if (!int.TryParse(BuildInputHeightTextBox.Text, out int inputHeight) || inputHeight <= 0)
+            if (!int.TryParse(
+                    BuildInputHeightTextBox.Text,
+                    out int inputHeight) ||
+                inputHeight <= 0)
             {
-                throw new InvalidOperationException("固定输入高度必须是正整数，例如 512。");
+                throw new InvalidOperationException(
+                    "固定输入高度必须是正整数，例如 512。");
             }
 
-            if (!int.TryParse(WorkspaceTextBox.Text, out int workspaceMiB) || workspaceMiB < 64)
+            if (!int.TryParse(
+                    WorkspaceTextBox.Text,
+                    out int workspaceMiB) ||
+                workspaceMiB < 64)
             {
-                throw new InvalidOperationException("Workspace 至少设置为 64 MiB；建议 2048。");
+                throw new InvalidOperationException(
+                    "Workspace 至少设置为 64 MiB；建议 2048。");
             }
 
             if (_gpuInfo is null)
@@ -533,157 +580,237 @@ public partial class MainWindow : Window
 
             if (_gpuInfo is null)
             {
-                throw new InvalidOperationException("无法读取当前 GPU 信息，不能安全创建 Engine 缓存。");
+                throw new InvalidOperationException(
+                    "无法读取当前 GPU 信息，不能安全创建 Engine 缓存。");
             }
 
-            bool enableFp16 = string.Equals(GetSelectedPrecision(), "FP16", StringComparison.OrdinalIgnoreCase);
+            bool enableFp16 =
+                string.Equals(
+                    GetSelectedPrecision(),
+                    "FP16",
+                    StringComparison.OrdinalIgnoreCase);
 
-            EngineCacheDescriptor? cacheDescriptor = null;
+            EngineCacheDescriptor? cacheDescriptor =
+                null;
+
             string enginePath;
 
             if (UseEngineCacheCheckBox.IsChecked == true)
             {
-                cacheDescriptor = await CreateCurrentCacheDescriptorAsync()
-                    ?? throw new InvalidOperationException("无法生成 Engine 缓存描述。");
+                cacheDescriptor =
+                    await CreateCurrentCacheDescriptorAsync()
+                    ?? throw new InvalidOperationException(
+                        "无法生成 Engine 缓存描述。");
 
-                enginePath = cacheDescriptor.EnginePath;
-                EngineOutputPathTextBox.Text = enginePath;
+                enginePath =
+                    cacheDescriptor.EnginePath;
 
-                bool forceRebuild = ForceRebuildCheckBox.IsChecked == true;
+                EngineOutputPathTextBox.Text =
+                    enginePath;
 
-                if (!forceRebuild && EngineCacheManager.TryValidate(cacheDescriptor, out string cacheReason))
+                bool forceRebuild =
+                    ForceRebuildCheckBox.IsChecked == true;
+
+                if (!forceRebuild &&
+                    EngineCacheManager.TryValidate(
+                        cacheDescriptor,
+                        out string cacheReason))
                 {
-                    EnginePathTextBox.Text = enginePath;
-                    InputWidthTextBox.Text = inputWidth.ToString(CultureInfo.InvariantCulture);
-                    InputHeightTextBox.Text = inputHeight.ToString(CultureInfo.InvariantCulture);
+                    EnginePathTextBox.Text =
+                        enginePath;
 
-                    BuildLogTextBox.Text = $@"Result: CACHE HIT
-Engine: {enginePath}
-GPU: {_gpuInfo.Name} | CC {_gpuInfo.ComputeCapability}
-TensorRT: {_gpuInfo.TensorRtVersion}
-Precision: {GetSelectedPrecision()}
-Input: {inputWidth}x{inputHeight}
-Workspace: {workspaceMiB} MiB
-Validation: {cacheReason}";
+                    InputWidthTextBox.Text =
+                        inputWidth.ToString(
+                            CultureInfo.InvariantCulture);
 
-                    CacheStatusTextBlock.Text = $"缓存命中：{System.IO.Path.GetFileName(enginePath)}";
-                    StatusTextBlock.Text = "已复用本机 Engine 缓存，无需重新构建。";
+                    InputHeightTextBox.Text =
+                        inputHeight.ToString(
+                            CultureInfo.InvariantCulture);
+
+                    BuildLogTextBox.Text =
+                        "Result: CACHE HI"
+                        + $"Engine: {enginePath}"
+                        + $"GPU: {_gpuInfo.Name} | CC {_gpuInfo.ComputeCapability}"
+                        + $"TensorRT: {_gpuInfo.TensorRtVersion}"
+                        + $"Precision: {GetSelectedPrecision()}"
+                        + $"Input: {inputWidth}x{inputHeight}\n"
+                        + $"Workspace: {workspaceMiB} MiB"
+                        + $"Validation: {cacheReason}";
+
+                    CacheStatusTextBlock.Text =
+                        $"缓存命中：{System.IO.Path.GetFileName(enginePath)}";
+
+                    StatusTextBlock.Text =
+                        "已复用本机 Engine 缓存，无需重新构建。";
+
                     return;
                 }
             }
             else
             {
-                enginePath = EngineOutputPathTextBox.Text.Trim();
-                if (string.IsNullOrWhiteSpace(enginePath))
+                enginePath =
+                    EngineOutputPathTextBox.Text.Trim();
+
+                if (string.IsNullOrWhiteSpace(
+                        enginePath))
                 {
-                    enginePath = BuildDefaultEnginePath(onnxPath);
-                    EngineOutputPathTextBox.Text = enginePath;
+                    enginePath =
+                        BuildDefaultEnginePath(
+                            onnxPath);
+
+                    EngineOutputPathTextBox.Text =
+                        enginePath;
                 }
 
-                if (!string.Equals(System.IO.Path.GetExtension(enginePath), ".engine", StringComparison.OrdinalIgnoreCase))
+                if (!string.Equals(
+                        System.IO.Path.GetExtension(enginePath),
+                        ".engine",
+                        StringComparison.OrdinalIgnoreCase))
                 {
                     enginePath += ".engine";
-                    EngineOutputPathTextBox.Text = enginePath;
+
+                    EngineOutputPathTextBox.Text =
+                        enginePath;
                 }
 
                 if (File.Exists(enginePath))
                 {
-                    var overwrite = MessageBox.Show(
-                        $@"Engine 已存在：
-{enginePath}
+                    var overwrite =
+                        MessageBox.Show(
+                            $"Engine 已存在：{enginePath}是否覆盖？",
+                            "确认覆盖",
+                            MessageBoxButton.YesNo,
+                            MessageBoxImage.Question);
 
-是否覆盖？",
-                        "确认覆盖",
-                        MessageBoxButton.YesNo,
-                        MessageBoxImage.Question);
-
-                    if (overwrite != MessageBoxResult.Yes)
+                    if (overwrite !=
+                        MessageBoxResult.Yes)
                     {
                         return;
                     }
                 }
             }
 
-            string? outputDirectory = System.IO.Path.GetDirectoryName(enginePath);
-            if (!string.IsNullOrWhiteSpace(outputDirectory))
+            string? outputDirectory =
+              System.IO.Path.GetDirectoryName(
+                    enginePath);
+
+            if (!string.IsNullOrWhiteSpace(
+                    outputDirectory))
             {
-                Directory.CreateDirectory(outputDirectory);
+                Directory.CreateDirectory(
+                    outputDirectory);
             }
 
             DestroyDetector();
-            ModelInfoTextBlock.Text = "模型尚未加载。";
 
-            BuildEngineButton.IsEnabled = false;
-            LoadModelButton.IsEnabled = false;
-            DetectButton.IsEnabled = false;
-            RefreshGpuInfoButton.IsEnabled = false;
+            ModelInfoTextBlock.Text =
+                "模型尚未加载。";
 
-            StatusTextBlock.Text = "正在从 ONNX 构建 TensorRT Engine，请勿关闭程序...";
+            BuildEngineButton.IsEnabled =
+                false;
 
-            BuildLogTextBox.Text = $@"开始构建...
-GPU: {_gpuInfo.Name} | CC {_gpuInfo.ComputeCapability}
-TensorRT: {_gpuInfo.TensorRtVersion}
-ONNX: {onnxPath}
-输出: {enginePath}
-精度: {GetSelectedPrecision()}
-输入: {inputWidth}x{inputHeight}
-Workspace: {workspaceMiB} MiB";
+            LoadModelButton.IsEnabled =
+                false;
 
-            var timer = Stopwatch.StartNew();
+            DetectButton.IsEnabled =
+                false;
 
-            var result = await Task.Run(() =>
-            {
-                var log = new StringBuilder(32768);
-                var error = new StringBuilder(8192);
+            RefreshGpuInfoButton.IsEnabled =
+                false;
 
-                int code = NativeMethods.YoloBuildEngineFromOnnx(
-                    onnxPath,
-                    enginePath,
-                    inputWidth,
-                    inputHeight,
-                    enableFp16 ? 1 : 0,
-                    workspaceMiB,
-                    log,
-                    log.Capacity,
-                    error,
-                    error.Capacity);
+            StatusTextBlock.Text =
+                "正在从 ONNX 构建 TensorRT Engine，请勿关闭程序...";
 
-                return (code, log: log.ToString(), error: error.ToString());
-            });
+            BuildLogTextBox.Text =
+                $"开始构建..."
+                + $"GPU: {_gpuInfo.Name} | CC {_gpuInfo.ComputeCapability}"
+                + $"TensorRT: {_gpuInfo.TensorRtVersion}"
+                + $"ONNX: {onnxPath}"
+                + $"输出: {enginePath}"
+                + $"精度: {GetSelectedPrecision()}"
+                + $"输入: {inputWidth}x{inputHeight}\n"
+                + $"Workspace: {workspaceMiB} MiB";
+
+            var timer =
+                Stopwatch.StartNew();
+
+            var result =
+                await Task.Run(() =>
+                {
+                    var log =
+                        new StringBuilder(32768);
+
+                    var error =
+                        new StringBuilder(8192);
+
+                    int code =
+                        NativeMethods.YoloBuildEngineFromOnnx(
+                            onnxPath,
+                            enginePath,
+                            inputWidth,
+                            inputHeight,
+                            enableFp16 ? 1 : 0,
+                            workspaceMiB,
+                            log,
+                            log.Capacity,
+                            error,
+                            error.Capacity);
+
+                    return (
+                        code,
+                        log: log.ToString(),
+                        error: error.ToString());
+                });
 
             timer.Stop();
-            BuildLogTextBox.Text = result.log;
+
+            BuildLogTextBox.Text =
+                result.log;
 
             if (result.code != 0)
             {
-                throw new InvalidOperationException($"ONNX → Engine 构建失败：\n{result.error}");
+                throw new InvalidOperationException(
+                    $"ONNX → Engine 构建失败：{result.error}");
             }
 
             if (!File.Exists(enginePath))
             {
-                throw new InvalidOperationException("TensorRT 返回成功，但未找到输出 Engine 文件。");
+                throw new InvalidOperationException(
+                    "TensorRT 返回成功，但未找到输出 Engine 文件。");
             }
 
             if (cacheDescriptor is not null)
             {
-                await EngineCacheManager.WriteMetadataAsync(cacheDescriptor, result.log);
-                CacheStatusTextBlock.Text = $"缓存已写入：{System.IO.Path.GetFileName(enginePath)}";
+                await EngineCacheManager.WriteMetadataAsync(
+                    cacheDescriptor,
+                    result.log);
+
+                CacheStatusTextBlock.Text =
+                    $"缓存已写入：{System.IO.Path.GetFileName(enginePath)}";
+
                 UpdateCacheStats();
             }
 
-            EnginePathTextBox.Text = enginePath;
-            InputWidthTextBox.Text = inputWidth.ToString(CultureInfo.InvariantCulture);
-            InputHeightTextBox.Text = inputHeight.ToString(CultureInfo.InvariantCulture);
+            EnginePathTextBox.Text =
+                enginePath;
 
-            StatusTextBlock.Text = $"Engine 构建成功 | 总耗时 {timer.Elapsed.TotalSeconds:0.0} s";
+            InputWidthTextBox.Text =
+                inputWidth.ToString(
+                    CultureInfo.InvariantCulture);
+
+            InputHeightTextBox.Text =
+                inputHeight.ToString(
+                    CultureInfo.InvariantCulture);
+
+            StatusTextBlock.Text =
+                $"Engine 构建成功 | 总耗时 {timer.Elapsed.TotalSeconds:0.0} s";
 
             MessageBox.Show(
-                $@"Engine 构建成功！
-
-{enginePath}
-
-{(cacheDescriptor is not null ? "已写入与当前 GPU / TensorRT / 模型配置绑定的本机缓存。\n" : "")}
-已自动填入下方 Engine 路径，可以直接点击""加载模型""。",
+                $"Engine 构建成功！{enginePath}"
+                + (cacheDescriptor is not null
+                    ? "已写入与当前 GPU / TensorRT / 模型配置绑定的本机缓存。"
+                    : "")
+                + "已自动填入下方 Engine 路径，可以直接点击“加载模型”。",
                 "构建完成",
                 MessageBoxButton.OK,
                 MessageBoxImage.Information);
@@ -691,28 +818,41 @@ Workspace: {workspaceMiB} MiB";
         catch (DllNotFoundException ex)
         {
             MessageBox.Show(
-                $@"无法加载 Native/TensorRT/CUDA DLL。
-
-ONNX 构建还要求 nvonnxparser_10.dll 可被 Windows 找到。
-
-{ex.Message}",
+                "无法加载 Native/TensorRT/CUDA DLL。"
+                + "ONNX 构建还要求 nvonnxparser_10.dll 可被 Windows 找到。"
+                + ex.Message,
                 "DLL 加载失败",
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
 
-            StatusTextBlock.Text = "Engine 构建失败";
+            StatusTextBlock.Text =
+                "Engine 构建失败";
         }
         catch (Exception ex)
         {
-            MessageBox.Show(ex.Message, "Engine 构建失败", MessageBoxButton.OK, MessageBoxImage.Error);
-            StatusTextBlock.Text = "Engine 构建失败";
+            MessageBox.Show(
+                ex.Message,
+                "Engine 构建失败",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+
+            StatusTextBlock.Text =
+                "Engine 构建失败";
         }
         finally
         {
-            BuildEngineButton.IsEnabled = true;
-            LoadModelButton.IsEnabled = true;
-            DetectButton.IsEnabled = true;
-            RefreshGpuInfoButton.IsEnabled = true;
+            BuildEngineButton.IsEnabled =
+                true;
+
+            LoadModelButton.IsEnabled =
+                true;
+
+            DetectButton.IsEnabled =
+                true;
+
+            RefreshGpuInfoButton.IsEnabled =
+                true;
+
             UpdateCacheStats();
         }
     }
@@ -897,11 +1037,39 @@ ONNX 构建还要求 nvonnxparser_10.dll 可被 Windows 找到。
             info,
             info.Capacity);
 
+        int taskHint =
+            NativeMethods.YoloGetTaskHint(
+                _detector,
+                _classNames.Length);
+
+        string taskText;
+
+        if (taskHint == 1)
+        {
+            ModelTaskComboBox.SelectedIndex = 1;
+            taskText = "OBB 旋转框（根据输出通道自动识别）";
+        }
+        else if (taskHint == 0)
+        {
+            ModelTaskComboBox.SelectedIndex = 0;
+            taskText = "普通 Detect（根据输出通道自动识别）";
+        }
+        else
+        {
+            taskText = "未自动识别，请手动选择 Detect / OBB";
+        }
+
         ModelInfoTextBlock.Text =
-            info.ToString();
+            info.ToString()
+            + $"\nTask: {taskText}";
 
         StatusTextBlock.Text =
             "模型加载成功";
+    }
+
+    private bool IsObbTask()
+    {
+        return ModelTaskComboBox.SelectedIndex == 1;
     }
 
     private async void Detect_Click(
@@ -937,17 +1105,22 @@ ONNX 构建还要求 nvonnxparser_10.dll 可被 Windows 找到。
                     out float nms))
             {
                 throw new InvalidOperationException(
-                    "NMS IoU 格式错误，例如 0.45。");
+                    "NMS 阈值格式错误，例如 0.45。");
             }
 
             DetectButton.IsEnabled = false;
             LoadModelButton.IsEnabled = false;
             BuildEngineButton.IsEnabled = false;
 
-            StatusTextBlock.Text =
-                "正在推理...";
+            bool obbTask =
+                IsObbTask();
 
-            var imageBytes =
+            StatusTextBlock.Text =
+                obbTask
+                    ? "正在执行 OBB 旋转框推理..."
+                    : "正在执行普通目标检测...";
+
+            byte[] imageBytes =
                 _currentBgra;
 
             int width =
@@ -962,77 +1135,169 @@ ONNX 构建还要求 nvonnxparser_10.dll 可被 Windows 找到。
             IntPtr detector =
                 _detector;
 
-            NativeMethods.YoloDetection[] buffer =
-                new NativeMethods.YoloDetection[2048];
-
             var totalTimer =
                 Stopwatch.StartNew();
 
-            var result =
-                await Task.Run(() =>
-                {
-                    var error =
-                        new StringBuilder(4096);
+            if (obbTask)
+            {
+                NativeMethods.YoloObbDetection[] buffer =
+                    new NativeMethods.YoloObbDetection[2048];
 
-                    int count =
-                        NativeMethods.YoloDetectBgra(
-                            detector,
-                            imageBytes,
-                            width,
-                            height,
-                            stride,
-                            confidence,
-                            nms,
-                            buffer,
-                            buffer.Length,
-                            out float inferenceMs,
-                            error,
-                            error.Capacity);
+                int expectedClassCount =
+                    _classNames.Length;
 
-                    if (count < 0)
+                var result =
+                    await Task.Run(() =>
                     {
-                        throw new InvalidOperationException(
-                            $"推理失败：\n{error}");
-                    }
+                        var error =
+                            new StringBuilder(4096);
 
-                    return (
-                        count,
-                        inferenceMs);
-                });
+                        int count =
+                            NativeMethods.YoloDetectObbBgra(
+                                detector,
+                                imageBytes,
+                                width,
+                                height,
+                                stride,
+                                confidence,
+                                nms,
+                                expectedClassCount,
+                                buffer,
+                                buffer.Length,
+                                out float inferenceMs,
+                                error,
+                                error.Capacity);
 
-            totalTimer.Stop();
-
-            var detections =
-                buffer.Take(result.count).ToArray();
-
-            DrawDetections(detections);
-
-            DetectionGrid.ItemsSource =
-                detections
-                .Select(
-                    (d, i) =>
-                        new DetectionRow
+                        if (count < 0)
                         {
-                            Index = i + 1,
-                            ClassName =
-                                GetClassName(d.ClassId),
-                            ScoreText =
-                                d.Score.ToString("0.000"),
-                            BoxText =
-                                $"{d.X1:0},{d.Y1:0} - {d.X2:0},{d.Y2:0}"
-                        })
-                .ToList();
+                            throw new InvalidOperationException(
+                                $"OBB 推理失败：{error}");
+                        }
 
-            StatusTextBlock.Text =
-                $"检测完成：{result.count} 个目标"
-                + $" | TensorRT {result.inferenceMs:0.00} ms"
-                + $" | 总耗时 {totalTimer.Elapsed.TotalMilliseconds:0.00} ms";
+                        return (
+                            count,
+                            inferenceMs);
+                    });
+
+                totalTimer.Stop();
+
+                var detections =
+                    buffer.Take(
+                        result.count)
+                    .ToArray();
+
+                DrawObbDetections(
+                    detections);
+
+                DetectionGrid.ItemsSource =
+                    detections
+                    .Select(
+                        (d, i) =>
+                        {
+                            double angleDegrees =
+                                d.AngleRadians
+                                * 180.0
+                                / Math.PI;
+
+                            return new DetectionRow
+                            {
+                                Index = i + 1,
+                                ClassName =
+                                    GetClassName(
+                                        d.ClassId),
+                                ScoreText =
+                                    d.Score.ToString("0.000"),
+                                BoxText =
+                                    $"C({d.CenterX:0},{d.CenterY:0}) "
+                                    + $"{d.Width:0}×{d.Height:0}",
+                                AngleText =
+                                    $"{angleDegrees:0.0}°"
+                            };
+                        })
+                    .ToList();
+
+                StatusTextBlock.Text =
+                    $"OBB 检测完成：{result.count} 个目标"
+                    + $" | TensorRT {result.inferenceMs:0.00} ms"
+                    + $" | 总耗时 {totalTimer.Elapsed.TotalMilliseconds:0.00} ms";
+            }
+            else
+            {
+                NativeMethods.YoloDetection[] buffer =
+                    new NativeMethods.YoloDetection[2048];
+
+                var result =
+                    await Task.Run(() =>
+                    {
+                        var error =
+                            new StringBuilder(4096);
+
+                        int count =
+                            NativeMethods.YoloDetectBgra(
+                                detector,
+                                imageBytes,
+                                width,
+                                height,
+                                stride,
+                                confidence,
+                                nms,
+                                buffer,
+                                buffer.Length,
+                                out float inferenceMs,
+                                error,
+                                error.Capacity);
+
+                        if (count < 0)
+                        {
+                            throw new InvalidOperationException(
+                                $"推理失败：{error}");
+                        }
+
+                        return (
+                            count,
+                            inferenceMs);
+                    });
+
+                totalTimer.Stop();
+
+                var detections =
+                    buffer.Take(
+                        result.count)
+                    .ToArray();
+
+                DrawDetections(
+                    detections);
+
+                DetectionGrid.ItemsSource =
+                    detections
+                    .Select(
+                        (d, i) =>
+                            new DetectionRow
+                            {
+                                Index = i + 1,
+                                ClassName =
+                                    GetClassName(
+                                        d.ClassId),
+                                ScoreText =
+                                    d.Score.ToString("0.000"),
+                                BoxText =
+                                    $"{d.X1:0},{d.Y1:0} - {d.X2:0},{d.Y2:0}",
+                                AngleText =
+                                    "-"
+                            })
+                    .ToList();
+
+                StatusTextBlock.Text =
+                    $"检测完成：{result.count} 个目标"
+                    + $" | TensorRT {result.inferenceMs:0.00} ms"
+                    + $" | 总耗时 {totalTimer.Elapsed.TotalMilliseconds:0.00} ms";
+            }
         }
         catch (DllNotFoundException ex)
         {
             MessageBox.Show(
-                "无法加载 YoloDeploy.Native.dll 或它依赖的 TensorRT/CUDA DLL。\n\n"
-                + "请检查 TENSORRT_ROOT、CUDA_PATH 和 PATH。\n\n"
+                "无法加载 YoloDeploy.Native.dll 或它依赖的 TensorRT/CUDA DLL。"
+                + "请检查发布目录中的 TensorRT/CUDA Runtime。"
                 + ex.Message,
                 "DLL 加载失败",
                 MessageBoxButton.OK,
@@ -1041,7 +1306,7 @@ ONNX 构建还要求 nvonnxparser_10.dll 可被 Windows 找到。
         catch (BadImageFormatException ex)
         {
             MessageBox.Show(
-                "DLL 位数不一致。请确保 WPF、Native DLL、TensorRT、CUDA 都是 x64。\n\n"
+                "DLL 位数不一致。请确保 WPF、Native DLL、TensorRT、CUDA 都是 x64。"
                 + ex.Message,
                 "架构错误",
                 MessageBoxButton.OK,
@@ -1137,6 +1402,98 @@ ONNX 构建还要求 nvonnxparser_10.dll 可被 Windows 找到。
                 Math.Max(
                     0,
                     y - fontSize - 8));
+
+            OverlayCanvas.Children.Add(
+                label);
+        }
+    }
+
+    private void DrawObbDetections(
+        IEnumerable<NativeMethods.YoloObbDetection> detections)
+    {
+        ClearOverlay();
+
+        double fontSize =
+            Math.Max(
+                12,
+                Math.Min(
+                    24,
+                    ImageSurface.Width / 55.0));
+
+        double strokeThickness =
+            Math.Max(
+                2,
+                ImageSurface.Width / 500.0);
+
+        foreach (var d in detections)
+        {
+            var points =
+                new PointCollection
+                {
+                    new Point(d.P1X, d.P1Y),
+                    new Point(d.P2X, d.P2Y),
+                    new Point(d.P3X, d.P3Y),
+                    new Point(d.P4X, d.P4Y)
+                };
+
+            var polygon =
+                new Polygon
+                {
+                    Points = points,
+                    Stroke = Brushes.Lime,
+                    StrokeThickness = strokeThickness,
+                    Fill = Brushes.Transparent
+                };
+
+            OverlayCanvas.Children.Add(
+                polygon);
+
+            double minX =
+                points.Min(
+                    p => p.X);
+
+            double minY =
+                points.Min(
+                    p => p.Y);
+
+            double angleDegrees =
+                d.AngleRadians
+                * 180.0
+                / Math.PI;
+
+            string caption =
+                $"{GetClassName(d.ClassId)} "
+                + $"{d.Score:0.00} "
+                + $"{angleDegrees:0.0}°";
+
+            var label =
+                new Border
+                {
+                    Background = Brushes.Black,
+                    Opacity = 0.80,
+                    Padding =
+                        new Thickness(
+                            4, 1, 4, 1),
+                    Child =
+                        new TextBlock
+                        {
+                            Text = caption,
+                            Foreground = Brushes.Lime,
+                            FontSize = fontSize
+                        }
+                };
+
+            Canvas.SetLeft(
+                label,
+                Math.Max(
+                    0,
+                    minX));
+
+            Canvas.SetTop(
+                label,
+                Math.Max(
+                    0,
+                    minY - fontSize - 8));
 
             OverlayCanvas.Children.Add(
                 label);
