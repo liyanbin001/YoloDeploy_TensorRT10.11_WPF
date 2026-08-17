@@ -39,6 +39,37 @@ internal static class NativeMethods
         public float P4Y;
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct YoloSegDetection
+    {
+        public float X1;
+        public float Y1;
+        public float X2;
+        public float Y2;
+
+        public float Score;
+        public int ClassId;
+
+        public float MaskAreaPixels;
+
+        public float CenterX;
+        public float CenterY;
+        public float RotatedWidth;
+        public float RotatedHeight;
+        public float AngleRadians;
+
+        public float P1X;
+        public float P1Y;
+        public float P2X;
+        public float P2Y;
+        public float P3X;
+        public float P3Y;
+        public float P4X;
+        public float P4Y;
+
+        public int MaskId;
+    }
+
     [DllImport(
         DllName,
         CallingConvention = CallingConvention.Cdecl,
@@ -99,6 +130,28 @@ internal static class NativeMethods
         int expectedClassCount,
         [Out] YoloObbDetection[] results,
         int resultCapacity,
+        out float inferenceMilliseconds,
+        StringBuilder errorBuffer,
+        int errorCapacity);
+
+    [DllImport(
+        DllName,
+        CallingConvention = CallingConvention.Cdecl,
+        CharSet = CharSet.Unicode)]
+    internal static extern int YoloDetectSegBgra(
+        IntPtr handle,
+        byte[] bgra,
+        int width,
+        int height,
+        int stride,
+        float confidenceThreshold,
+        float nmsThreshold,
+        float maskThreshold,
+        int expectedClassCount,
+        [Out] YoloSegDetection[] results,
+        int resultCapacity,
+        [Out] ushort[] instanceMask,
+        int maskStride,
         out float inferenceMilliseconds,
         StringBuilder errorBuffer,
         int errorCapacity);

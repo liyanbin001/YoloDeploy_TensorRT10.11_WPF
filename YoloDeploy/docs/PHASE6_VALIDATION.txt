@@ -1,0 +1,16 @@
+﻿Phase 6 static validation
+=========================
+- WPF XAML parsed successfully.
+- All XAML event handlers resolve to MainWindow.xaml.cs methods.
+- Detect and OBB paths are preserved.
+- YOLO26 Seg P/Invoke/native API is present.
+- TensorRT runtime accepts one output (Detect/OBB) or two outputs (Seg prediction + proto).
+- ONNX builder accepts one or two outputs.
+- Seg path includes mask coefficient × proto reconstruction, bilinear mask sampling,
+  mask-derived bbox/area, convex hull, and minimum-area rectangle.
+- Instance ID map is UInt16.
+- Fixed rectangular W/H, GPU Engine cache, and one-click Release files are retained.
+- YoloBridge.cpp and OnnxEngineBuilder.cpp passed clang++ C++17 syntax checks
+  using local TensorRT/CUDA API stubs. This is a syntax check, not a real TensorRT build.
+- Real Windows VS2022 + CUDA 12.3 + TensorRT 10.11 compilation/inference must still
+  be performed on the deployment development machine.

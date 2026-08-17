@@ -2,7 +2,7 @@
 param(
     [string]$Configuration = "Release",
     [string]$RuntimeIdentifier = "win-x64",
-    [string]$PackageName = "YoloDeploy_v5_detect-obb_win-x64",
+    [string]$PackageName = "YoloDeploy_v6_seg-minrect_win-x64",
     [switch]$NoZip
 )
 
@@ -337,7 +337,7 @@ foreach ($modelSource in $ModelSources) {
 }
 
 $ModelReadme = @'
-把准备部署的标准 YOLO Detect 或 YOLO OBB ONNX 放到此目录。
+把准备部署的 YOLO Detect、YOLO OBB 或 YOLO26-Seg ONNX 放到此目录。
 
 推荐目标机第一次运行：
 1. 双击 ..\run_YoloDeploy.bat

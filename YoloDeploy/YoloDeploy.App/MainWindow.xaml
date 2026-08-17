@@ -1,7 +1,7 @@
 ﻿<Window x:Class="YoloDeploy.App.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="YOLO TensorRT Deploy - Detect / OBB"
+        Title="YOLO TensorRT Deploy - Detect / OBB / Seg + MinRect"
         Width="1320"
         Height="950"
         MinWidth="1080"
@@ -265,19 +265,20 @@
             </Grid>
         </Border>
 
-        <StackPanel Grid.Row="3"
-                    Margin="0,10,0,0"
-                    Orientation="Horizontal">
+        <WrapPanel Grid.Row="3"
+                   Margin="0,10,0,0"
+                   Orientation="Horizontal">
 
             <TextBlock VerticalAlignment="Center"
                        Text="模型任务"/>
 
             <ComboBox x:Name="ModelTaskComboBox"
-                      Width="145"
+                      Width="220"
                       Margin="8,0,20,0"
                       SelectedIndex="0">
                 <ComboBoxItem Content="普通检测 Detect"/>
                 <ComboBoxItem Content="旋转框 OBB"/>
+                <ComboBoxItem Content="实例分割 Seg → 多任务"/>
             </ComboBox>
 
             <TextBlock VerticalAlignment="Center"
@@ -295,6 +296,32 @@
                      Width="70"
                      Margin="8,0,20,0"
                      Text="0.45"/>
+
+            <TextBlock VerticalAlignment="Center"
+                       Text="Mask阈值"/>
+
+            <TextBox x:Name="MaskThresholdTextBox"
+                     Width="70"
+                     Margin="8,0,20,0"
+                     Text="0.50"/>
+
+            <CheckBox x:Name="ShowMaskCheckBox"
+                      Margin="4,0,12,0"
+                      VerticalAlignment="Center"
+                      IsChecked="True"
+                      Content="显示Mask"/>
+
+            <CheckBox x:Name="ShowBBoxCheckBox"
+                      Margin="4,0,12,0"
+                      VerticalAlignment="Center"
+                      IsChecked="True"
+                      Content="显示水平框"/>
+
+            <CheckBox x:Name="ShowMinRectCheckBox"
+                      Margin="4,0,20,0"
+                      VerticalAlignment="Center"
+                      IsChecked="True"
+                      Content="显示最小外接矩形"/>
 
             <TextBlock VerticalAlignment="Center"
                        Text="Engine宽度"/>
@@ -325,7 +352,7 @@
                     Padding="10,6"
                     Content="执行检测"
                     Click="Detect_Click"/>
-        </StackPanel>
+        </WrapPanel>
 
         <TextBlock x:Name="ModelInfoTextBlock"
                    Grid.Row="4"
@@ -352,6 +379,12 @@
                           Background="Black">
                         <Image x:Name="PreviewImage"
                                Stretch="Fill"/>
+
+                        <Image x:Name="MaskOverlayImage"
+                               Stretch="Fill"
+                               Opacity="0.42"
+                               IsHitTestVisible="False"/>
+
                         <Canvas x:Name="OverlayCanvas"
                                 ClipToBounds="True"
                                 IsHitTestVisible="False"/>
@@ -385,6 +418,9 @@
                         <DataGridTextColumn Header="角度"
                                             Binding="{Binding AngleText}"
                                             Width="75"/>
+                        <DataGridTextColumn Header="Mask面积"
+                                            Binding="{Binding AreaText}"
+                                            Width="95"/>
                     </DataGrid.Columns>
                 </DataGrid>
             </Border>

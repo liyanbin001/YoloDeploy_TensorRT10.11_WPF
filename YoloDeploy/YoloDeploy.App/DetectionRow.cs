@@ -7,4 +7,5 @@ public sealed class DetectionRow
     public string ScoreText { get; init; } = "";
     public string BoxText { get; init; } = "";
     public string AngleText { get; init; } = "";
+    public string AreaText { get; init; } = "";
 }

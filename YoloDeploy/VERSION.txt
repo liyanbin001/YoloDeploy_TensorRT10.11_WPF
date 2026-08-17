@@ -1,5 +1,7 @@
 ﻿YoloDeploy TensorRT10.11 WPF
-Phase 5: Detect + OBB rotated bounding box inference
+Phase 6: YOLO26 instance segmentation + mask-derived AABB / minimum-area rectangle
+Recommended: YOLO26-Seg ONNX end2end=False, nms=False
+Includes Phase 5: Detect + OBB compatibility
 Includes Phase 4: fixed rectangular input width + height
 Includes Phase 3: one-click Release publishing
 Includes Phase 2: GPU info + Engine cache

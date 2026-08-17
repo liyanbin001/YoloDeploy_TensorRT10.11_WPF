@@ -326,36 +326,76 @@ int32_t __cdecl YoloBuildEngineFromOnnx(
         if (network->getNbInputs() != 1)
         {
             std::ostringstream oss;
-            oss << "Phase 1 requires exactly one ONNX input, but model has "
+            oss << "This deployment requires exactly one ONNX input, but model has "
                 << network->getNbInputs() << ".";
             throw std::runtime_error(oss.str());
         }
 
-        if (network->getNbOutputs() != 1)
+        const int outputCount =
+            network->getNbOutputs();
+
+        if (outputCount < 1 ||
+            outputCount > 2)
         {
             std::ostringstream oss;
-            oss << "Phase 1 requires exactly one ONNX output, but model has "
-                << network->getNbOutputs() << ".";
-            throw std::runtime_error(oss.str());
+            oss
+                << "This deployment supports one ONNX output "
+                << "(Detect/OBB) or two outputs "
+                << "(YOLO26 Seg prediction + proto), but model has "
+                << outputCount
+                << ".";
+
+            throw std::runtime_error(
+                oss.str());
         }
 
-        nvinfer1::ITensor* input = network->getInput(0);
-        nvinfer1::ITensor* output = network->getOutput(0);
+        nvinfer1::ITensor* input =
+            network->getInput(0);
 
-        if (!input || !output)
+        if (!input)
+        {
             throw std::runtime_error(
-                "Unable to read ONNX input/output tensors.");
+                "Unable to read ONNX input tensor.");
+        }
 
         const nvinfer1::Dims originalInputDims =
             input->getDimensions();
 
-        report << "Parsed input: "
-               << (input->getName() ? input->getName() : "<unnamed>")
-               << " " << dimsToString(originalInputDims) << "\n";
+        report
+            << "Parsed input: "
+            << (input->getName()
+                    ? input->getName()
+                    : "<unnamed>")
+            << " "
+            << dimsToString(
+                originalInputDims)
+            << "\n";
 
-        report << "Parsed output: "
-               << (output->getName() ? output->getName() : "<unnamed>")
-               << " " << dimsToString(output->getDimensions()) << "\n";
+        for (int i = 0;
+             i < outputCount;
+             ++i)
+        {
+            nvinfer1::ITensor* output =
+                network->getOutput(i);
+
+            if (!output)
+            {
+                throw std::runtime_error(
+                    "Unable to read an ONNX output tensor.");
+            }
+
+            report
+                << "Parsed output["
+                << i
+                << "]: "
+                << (output->getName()
+                        ? output->getName()
+                        : "<unnamed>")
+                << " "
+                << dimsToString(
+                    output->getDimensions())
+                << "\n";
+        }
 
         if (originalInputDims.nbDims != 4)
             throw std::runtime_error(

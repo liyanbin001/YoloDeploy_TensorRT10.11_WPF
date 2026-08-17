@@ -4,27 +4,73 @@ Windows x64 / .NET 8 WPF + C++ TensorRT 10.11 deployment app for Ultralytics YOL
 
 ## Supported engine profile
 
-This first version intentionally targets the easiest and most reliable deployment path:
+Current Phase 6 supports:
 
-- Standard Ultralytics YOLO **Detect** (horizontal boxes) or **OBB** (rotated boxes)
+- Standard Ultralytics YOLO **Detect** raw output
+- Standard Ultralytics YOLO **OBB** raw output
+- **YOLO26 instance segmentation** with prediction + prototype outputs
 - Batch = 1
 - One image input
-- One prediction output
-- Engine does **not** contain NMS
-- Detect raw output: `[1, 4+nc, N]` or `[1, N, 4+nc]`
-- OBB raw output: `[1, 5+nc, N]` or `[1, N, 5+nc]`
-- FP32 or FP16 input/output tensors
-- Fixed rectangular input H/W such as 1280x512; a dynamic ONNX may also be built as one fixed MIN=OPT=MAX H/W profile
-- COCO 80 classes by default; replace `YoloDeploy.App\coco.names` for custom classes
+- Detect/OBB: one 3D prediction output
+- Seg: one 3D prediction output + one 4D prototype output
+- FP32 or FP16 TensorRT input/output
+- Fixed rectangular input H/W such as `1280x512`
+- GPU-specific Engine cache
+- ONNX -> TensorRT Engine construction
+- One-click self-contained Windows Release publishing
 
-Not targeted in this first version:
+Phase 6 recommended industrial model path:
 
-- Segmentation / pose / classification
-- INT8 input/output tensors
-- Engines with EfficientNMS / multiple outputs
+```text
+YOLO26n-seg
+  -> instance class + confidence
+  -> instance binary mask
+  -> mask-derived horizontal bounding box
+  -> mask-derived minimum-area rotated rectangle
+  -> mask pixel area
+```
+
+Recommended YOLO26 Seg ONNX export:
+
+```python
+from ultralytics import YOLO
+
+model = YOLO("yolo26n-seg.pt")
+model.export(
+    format="onnx",
+    imgsz=(512, 1280),  # height, width
+    batch=1,
+    dynamic=False,
+    end2end=False,
+    nms=False,
+    simplify=True,
+)
+```
+
+Recommended raw segmentation outputs:
+
+```text
+prediction: [1, 4 + nc + nm, N] or [1, N, 4 + nc + nm]
+proto:      [1, nm, protoH, protoW]
+```
+
+YOLO26 end-to-end segmentation prediction `[1,max_det,6+nm]` is also accepted,
+but `end2end=False, nms=False` is recommended so the deployment post-processing
+remains explicit and easy to verify.
+
+For custom classes, replace `YoloDeploy.App\coco.names` with the exact class
+count and training order.
+
+Not targeted in Phase 6:
+
+- Dedicated whole-image classification semantics (`yolo26*-cls`)
+- Pose
+- Semantic segmentation
+- INT8 I/O / calibration flow
+- More than two model outputs
 - Batch > 1
-- Multiple inputs
-- Custom preprocessing that differs from Ultralytics LetterBox + RGB + /255
+- Multiple image inputs
+- Custom preprocessing that differs from LetterBox + RGB + `/255` + NCHW
 
 ## Prerequisites
 
@@ -87,11 +133,14 @@ Verify with TensorRT before opening this solution:
 
 ## Usage
 
-1. Browse to a `.engine`.
-2. Browse to an image.
-3. Set confidence/NMS thresholds.
-4. Click **执行检测**.
-5. The image is decoded by WPF, converted to BGRA, sent to the native DLL, preprocessed, inferred by TensorRT, NMS-filtered, and boxes are rendered by WPF.
+1. Choose an ONNX and build/reuse the local TensorRT Engine, or browse to an existing `.engine`.
+2. For YOLO26 Seg, select **实例分割 Seg → 多任务** (the app also auto-detects the two-output signature).
+3. Set confidence, NMS and Mask thresholds.
+4. Choose the desired derived visualization:
+   - `显示Mask` -> instance segmentation
+   - `显示水平框` -> mask-derived object detection
+   - `显示最小外接矩形` -> mask-derived rotated box
+5. The result table always shows the per-instance class/confidence, so the same Seg model also supplies instance classification.
 
 ## Runtime architecture
 
@@ -139,7 +188,7 @@ Run:
 "%TENSORRT_ROOT%\bin\trtexec.exe" --loadEngine="your.engine" --verbose --dumpLayerInfo
 ```
 
-This project expects a standard raw YOLO Detect or OBB prediction output. Engines with embedded/end-to-end NMS or custom multi-output heads require separate output adapters.
+This project supports standard raw Detect/OBB outputs and the Phase 6 YOLO26 Seg prediction+proto layout. Other custom multi-output heads still require a dedicated adapter.
 
 ### Boxes are wrong
 
@@ -269,3 +318,38 @@ The WPF UI draws OBB results as four-point polygons and displays the angle in de
 
 The Phase 1 ONNX builder, Phase 2 GPU Engine cache, Phase 4 fixed rectangular W/H
 input and Phase 3 one-click publishing are preserved.
+
+
+## Phase 6: YOLO26 Seg -> unified industrial multi-task geometry
+
+Phase 6 adds a third inference path while keeping Detect and OBB compatible:
+
+```text
+Seg -> YoloDetectSegBgra()
+    -> class-aware NMS for raw export
+    -> mask coefficients x prototypes
+    -> original-resolution binary instance mask
+    -> mask AABB
+    -> convex hull
+    -> minimum-area rotated rectangle
+```
+
+No OpenCV dependency is added. The minimum-area rectangle is computed in the
+native C++ layer using mask boundary points and a convex-hull/minimum-area
+geometry routine.
+
+This means one instance-segmentation model can provide four practical outputs:
+
+```text
+classification : class id + confidence for each instance
+segmentation   : instance mask
+detection      : horizontal bounding box derived from mask
+rotated box    : minimum-area rectangle derived from mask
+```
+
+See:
+
+```text
+docs\PHASE6_YOLO26_SEG_MINRECT_CN.md
+models\export_yolo26_seg_example.py
+```

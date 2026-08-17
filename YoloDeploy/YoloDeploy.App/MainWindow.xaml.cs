@@ -8,6 +8,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
+
 namespace YoloDeploy.App;
 
 public partial class MainWindow : Window
@@ -628,7 +629,7 @@ public partial class MainWindow : Window
                             CultureInfo.InvariantCulture);
 
                     BuildLogTextBox.Text =
-                        "Result: CACHE HI"
+                        "Result: CACHE HIT"
                         + $"Engine: {enginePath}"
                         + $"GPU: {_gpuInfo.Name} | CC {_gpuInfo.ComputeCapability}"
                         + $"TensorRT: {_gpuInfo.TensorRtVersion}"
@@ -691,7 +692,7 @@ public partial class MainWindow : Window
             }
 
             string? outputDirectory =
-              System.IO.Path.GetDirectoryName(
+                System.IO.Path.GetDirectoryName(
                     enginePath);
 
             if (!string.IsNullOrWhiteSpace(
@@ -957,6 +958,15 @@ public partial class MainWindow : Window
 
         OverlayCanvas.Height =
             converted.PixelHeight;
+
+        MaskOverlayImage.Width =
+            converted.PixelWidth;
+
+        MaskOverlayImage.Height =
+            converted.PixelHeight;
+
+        MaskOverlayImage.Source =
+            null;
     }
 
     private void LoadModel_Click(
@@ -1044,7 +1054,12 @@ public partial class MainWindow : Window
 
         string taskText;
 
-        if (taskHint == 1)
+        if (taskHint == 2)
+        {
+            ModelTaskComboBox.SelectedIndex = 2;
+            taskText = "YOLO26 实例分割 Seg（prediction + proto 自动识别）";
+        }
+        else if (taskHint == 1)
         {
             ModelTaskComboBox.SelectedIndex = 1;
             taskText = "OBB 旋转框（根据输出通道自动识别）";
@@ -1056,7 +1071,7 @@ public partial class MainWindow : Window
         }
         else
         {
-            taskText = "未自动识别，请手动选择 Detect / OBB";
+            taskText = "未自动识别，请手动选择 Detect / OBB / Seg";
         }
 
         ModelInfoTextBlock.Text =
@@ -1070,6 +1085,11 @@ public partial class MainWindow : Window
     private bool IsObbTask()
     {
         return ModelTaskComboBox.SelectedIndex == 1;
+    }
+
+    private bool IsSegTask()
+    {
+        return ModelTaskComboBox.SelectedIndex == 2;
     }
 
     private async void Detect_Click(
@@ -1108,17 +1128,34 @@ public partial class MainWindow : Window
                     "NMS 阈值格式错误，例如 0.45。");
             }
 
+            if (!float.TryParse(
+                    MaskThresholdTextBox.Text,
+                    NumberStyles.Float,
+                    CultureInfo.InvariantCulture,
+                    out float maskThreshold)
+                || maskThreshold <= 0.0f
+                || maskThreshold >= 1.0f)
+            {
+                throw new InvalidOperationException(
+                    "Mask 阈值必须在 0 和 1 之间，例如 0.50。");
+            }
+
             DetectButton.IsEnabled = false;
             LoadModelButton.IsEnabled = false;
             BuildEngineButton.IsEnabled = false;
+
+            bool segTask =
+                IsSegTask();
 
             bool obbTask =
                 IsObbTask();
 
             StatusTextBlock.Text =
-                obbTask
-                    ? "正在执行 OBB 旋转框推理..."
-                    : "正在执行普通目标检测...";
+                segTask
+                    ? "正在执行 YOLO26 实例分割并计算最小外接矩形..."
+                    : obbTask
+                        ? "正在执行 OBB 旋转框推理..."
+                        : "正在执行普通目标检测...";
 
             byte[] imageBytes =
                 _currentBgra;
@@ -1138,7 +1175,115 @@ public partial class MainWindow : Window
             var totalTimer =
                 Stopwatch.StartNew();
 
-            if (obbTask)
+            if (segTask)
+            {
+                NativeMethods.YoloSegDetection[] buffer =
+                    new NativeMethods.YoloSegDetection[2048];
+
+                // Original-resolution uint16 instance-id map.
+                // 0 = background, 1..N = result.MaskId.
+                ushort[] instanceMask =
+                    new ushort[
+                        width
+                        * height];
+
+                int expectedClassCount =
+                    _classNames.Length;
+
+                var result =
+                    await Task.Run(() =>
+                    {
+                        var error =
+                            new StringBuilder(8192);
+
+                        int count =
+                            NativeMethods.YoloDetectSegBgra(
+                                detector,
+                                imageBytes,
+                                width,
+                                height,
+                                stride,
+                                confidence,
+                                nms,
+                                maskThreshold,
+                                expectedClassCount,
+                                buffer,
+                                buffer.Length,
+                                instanceMask,
+                                width,
+                                out float inferenceMs,
+                                error,
+                                error.Capacity);
+
+                        if (count < 0)
+                        {
+                            throw new InvalidOperationException(
+                                $"Seg 推理失败：{error}");
+                        }
+
+                        return (
+                            count,
+                            inferenceMs);
+                    });
+
+                totalTimer.Stop();
+
+                var detections =
+                    buffer
+                    .Take(result.count)
+                    .ToArray();
+
+                DrawSegDetections(
+                    detections,
+                    instanceMask,
+                    width,
+                    height);
+
+                DetectionGrid.ItemsSource =
+                    detections
+                    .Select(
+                        (d, i) =>
+                        {
+                            double angleDegrees =
+                                d.AngleRadians
+                                * 180.0
+                                / Math.PI;
+
+                            return new DetectionRow
+                            {
+                                Index = i + 1,
+                                ClassName =
+                                    GetClassName(
+                                        d.ClassId),
+                                ScoreText =
+                                    d.Score.ToString("0.000"),
+                                BoxText =
+                                    $"MaskBox({d.X1:0},{d.Y1:0})-({d.X2:0},{d.Y2:0}) "
+                                    + $"R={d.RotatedWidth:0}×{d.RotatedHeight:0}",
+                                AngleText =
+                                    $"{angleDegrees:0.0}°",
+                                AreaText =
+                                    $"{d.MaskAreaPixels:0} px"
+                            };
+                        })
+                    .ToList();
+
+                string classSummary =
+                    string.Join(
+                        ", ",
+                        detections
+                        .GroupBy(d => GetClassName(d.ClassId))
+                        .Select(group => $"{group.Key}×{group.Count()}"));
+
+                StatusTextBlock.Text =
+                    $"Seg 完成：{result.count} 个实例"
+                    + (string.IsNullOrWhiteSpace(classSummary)
+                        ? ""
+                        : $" | 分类：{classSummary}")
+                    + $" | TensorRT {result.inferenceMs:0.00} ms"
+                    + $" | 总耗时 {totalTimer.Elapsed.TotalMilliseconds:0.00} ms";
+            }
+            else if (obbTask)
             {
                 NativeMethods.YoloObbDetection[] buffer =
                     new NativeMethods.YoloObbDetection[2048];
@@ -1211,7 +1356,9 @@ public partial class MainWindow : Window
                                     $"C({d.CenterX:0},{d.CenterY:0}) "
                                     + $"{d.Width:0}×{d.Height:0}",
                                 AngleText =
-                                    $"{angleDegrees:0.0}°"
+                                    $"{angleDegrees:0.0}°",
+                                AreaText =
+                                    "-"
                             };
                         })
                     .ToList();
@@ -1283,6 +1430,8 @@ public partial class MainWindow : Window
                                 BoxText =
                                     $"{d.X1:0},{d.Y1:0} - {d.X2:0},{d.Y2:0}",
                                 AngleText =
+                                    "-",
+                                AreaText =
                                     "-"
                             })
                     .ToList();
@@ -1500,6 +1649,252 @@ public partial class MainWindow : Window
         }
     }
 
+    private void DrawSegDetections(
+        IReadOnlyList<NativeMethods.YoloSegDetection> detections,
+        ushort[] instanceMask,
+        int width,
+        int height)
+    {
+        ClearOverlay();
+
+        if (ShowMaskCheckBox.IsChecked == true)
+        {
+            DrawInstanceMask(
+                instanceMask,
+                width,
+                height);
+        }
+
+        double fontSize =
+            Math.Max(
+                12,
+                Math.Min(
+                    24,
+                    ImageSurface.Width / 55.0));
+
+        double strokeThickness =
+            Math.Max(
+                2,
+                ImageSurface.Width / 500.0);
+
+        foreach (var d in detections)
+        {
+            if (ShowBBoxCheckBox.IsChecked == true)
+            {
+                var rect =
+                    new Rectangle
+                    {
+                        Width =
+                            Math.Max(
+                                1,
+                                d.X2 - d.X1),
+                        Height =
+                            Math.Max(
+                                1,
+                                d.Y2 - d.Y1),
+                        Stroke =
+                            Brushes.DeepSkyBlue,
+                        StrokeThickness =
+                            strokeThickness
+                    };
+
+                Canvas.SetLeft(
+                    rect,
+                    d.X1);
+
+                Canvas.SetTop(
+                    rect,
+                    d.Y1);
+
+                OverlayCanvas.Children.Add(
+                    rect);
+            }
+
+            var rotatedPoints =
+                new PointCollection
+                {
+                    new Point(d.P1X, d.P1Y),
+                    new Point(d.P2X, d.P2Y),
+                    new Point(d.P3X, d.P3Y),
+                    new Point(d.P4X, d.P4Y)
+                };
+
+            if (ShowMinRectCheckBox.IsChecked == true)
+            {
+                var polygon =
+                    new Polygon
+                    {
+                        Points =
+                            rotatedPoints,
+                        Stroke =
+                            Brushes.Lime,
+                        StrokeThickness =
+                            strokeThickness,
+                        Fill =
+                            Brushes.Transparent
+                    };
+
+                OverlayCanvas.Children.Add(
+                    polygon);
+            }
+
+            double minX =
+                Math.Min(
+                    d.X1,
+                    rotatedPoints.Min(
+                        point => point.X));
+
+            double minY =
+                Math.Min(
+                    d.Y1,
+                    rotatedPoints.Min(
+                        point => point.Y));
+
+            double angleDegrees =
+                d.AngleRadians
+                * 180.0
+                / Math.PI;
+
+            string caption =
+                $"{GetClassName(d.ClassId)} "
+                + $"{d.Score:0.00} "
+                + $"A={d.MaskAreaPixels:0}px "
+                + $"{angleDegrees:0.0}°";
+
+            var label =
+                new Border
+                {
+                    Background =
+                        Brushes.Black,
+                    Opacity =
+                        0.82,
+                    Padding =
+                        new Thickness(
+                            4,
+                            1,
+                            4,
+                            1),
+                    Child =
+                        new TextBlock
+                        {
+                            Text =
+                                caption,
+                            Foreground =
+                                Brushes.Lime,
+                            FontSize =
+                                fontSize
+                        }
+                };
+
+            Canvas.SetLeft(
+                label,
+                Math.Max(
+                    0,
+                    minX));
+
+            Canvas.SetTop(
+                label,
+                Math.Max(
+                    0,
+                    minY - fontSize - 8));
+
+            OverlayCanvas.Children.Add(
+                label);
+        }
+    }
+
+    private void DrawInstanceMask(
+        ushort[] instanceMask,
+        int width,
+        int height)
+    {
+        if (instanceMask.Length <
+            width * height)
+        {
+            throw new InvalidOperationException(
+                "实例 Mask 缓冲区大小不正确。");
+        }
+
+        int stride =
+            width * 4;
+
+        byte[] bgra =
+            new byte[
+                stride
+                * height];
+
+        for (int y = 0;
+             y < height;
+             ++y)
+        {
+            int maskRow =
+                y * width;
+
+            int pixelRow =
+                y * stride;
+
+            for (int x = 0;
+                 x < width;
+                 ++x)
+            {
+                ushort id =
+                    instanceMask[
+                        maskRow + x];
+
+                if (id == 0)
+                    continue;
+
+                // Deterministic, dependency-free instance palette.
+                byte red =
+                    (byte)(
+                        64
+                        + (id * 73) % 192);
+
+                byte green =
+                    (byte)(
+                        64
+                        + (id * 151) % 192);
+
+                byte blue =
+                    (byte)(
+                        64
+                        + (id * 199) % 192);
+
+                int offset =
+                    pixelRow
+                    + x * 4;
+
+                bgra[offset + 0] =
+                    blue;
+
+                bgra[offset + 1] =
+                    green;
+
+                bgra[offset + 2] =
+                    red;
+
+                bgra[offset + 3] =
+                    220;
+            }
+        }
+
+        BitmapSource overlay =
+            BitmapSource.Create(
+                width,
+                height,
+                96,
+                96,
+                PixelFormats.Bgra32,
+                null,
+                bgra,
+                stride);
+
+        overlay.Freeze();
+
+        MaskOverlayImage.Source =
+            overlay;
+    }
+
     private string GetClassName(
         int classId)
     {
@@ -1512,8 +1907,11 @@ public partial class MainWindow : Window
         return $"class_{classId}";
     }
 
-    private void ClearOverlay() =>
+    private void ClearOverlay()
+    {
         OverlayCanvas.Children.Clear();
+        MaskOverlayImage.Source = null;
+    }
 
     private void DestroyDetector()
     {
