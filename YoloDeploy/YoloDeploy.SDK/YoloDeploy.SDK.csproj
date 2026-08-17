@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <!--
+    YoloDeploy.Native is still a native VC++ project.
+    Build Release|x64 once before building this SDK.
+  -->
+  <Target Name="CopyNativeDll" AfterTargets="Build">
+    <PropertyGroup>
+      <NativeDll>$(MSBuildProjectDirectory)\..\artifacts\native\$(Configuration)\YoloDeploy.Native.dll</NativeDll>
+    </PropertyGroup>
+    <Copy SourceFiles="$(NativeDll)"
+          DestinationFolder="$(OutDir)"
+          Condition="Exists('$(NativeDll)')" />
+  </Target>
+
+</Project>
