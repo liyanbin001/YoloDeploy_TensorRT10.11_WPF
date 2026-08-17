@@ -1,4 +1,6 @@
-﻿namespace YoloDeploy.SDK;
+﻿using System;
+using System.IO;
+namespace YoloDeploy.SDK;
 
 /// <summary>
 /// OBB detector configuration. InputWidth/InputHeight are fixed for one detector instance.

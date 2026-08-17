@@ -1,0 +1,18 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <PlatformTarget>x64</PlatformTarget>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+  </PropertyGroup>
+
+  <!--
+    推荐做法：
+    1. 在 Visual Studio 中添加对 YoloDeploy.SDK.dll 的引用；
+    2. 将 Runtime ZIP 中的全部根目录 DLL 复制到客户端 exe 输出目录。
+  -->
+
+</Project>

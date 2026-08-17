@@ -1,0 +1,11 @@
+﻿客户模型建议放在本目录，例如：
+
+Models\best.onnx
+Models\classes.names
+
+第一次初始化 SDK 会根据当前 GPU / TensorRT / 固定输入尺寸自动生成本机 Engine。
+Engine 默认缓存到：
+
+%LOCALAPPDATA%\YoloDeploy\EngineCache
+
+请不要把开发电脑生成的 .engine 当作跨机器模型文件分发。

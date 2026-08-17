@@ -1,4 +1,6 @@
-﻿using YoloDeploy.SDK;
+﻿using System;
+using System.IO;
+using YoloDeploy.SDK;
 
 if (args.Length < 4)
 {
